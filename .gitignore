@@ -1,0 +1,21 @@
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VS Code settings
+.vscode/
+
+# Python package build files
+*.egg-info/
+build/
+dist/
+
+# Data and output files
+data_Gupta_1992/
+output/
+
+# System files
+.DS_Store
+Thumbs.db
