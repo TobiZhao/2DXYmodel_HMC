@@ -19,3 +19,7 @@ output/
 # System files
 .DS_Store
 Thumbs.db
+
+# Others
+print_dir_struc.py
+temp.txt
