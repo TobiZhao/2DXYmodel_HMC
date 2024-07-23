@@ -18,10 +18,10 @@ Project structure:
     │   └── XYmodel_HMC.py
     ├── observables/
     │   ├── helicity_modulus.py
-    │   └── vortex_func.py
+    │   └── vortex.py
     └── utils/
         ├── logging.py
-        ├── plotting.py
+        ├── visualization.py
         ├── proc_data.py
-        └── proc_data_func.py
+        └── data_processing.py
 ```
