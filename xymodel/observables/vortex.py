@@ -4,7 +4,6 @@
 
 import numpy as np
 
-
 def compute_vor(spin_config, vor_thld=0.01):
     """
     Compute the vortex density for a given spin configuration.

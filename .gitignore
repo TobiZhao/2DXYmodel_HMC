@@ -16,6 +16,9 @@ dist/
 data_Gupta_1992/
 output/
 
+# Scripts
+scripts/
+
 # System files
 .DS_Store
 Thumbs.db
@@ -23,3 +26,4 @@ Thumbs.db
 # Others
 print_dir_struc.py
 temp.txt
+job_notes/

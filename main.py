@@ -12,7 +12,6 @@ def parse_args():
     parser.add_argument("--seed", type = bool, default = sys_paras['seed'], help = "seed for random number generator")
     parser.add_argument("--L", type = int, default = sys_paras['L'], help = "lattice size")
     parser.add_argument("--a", type = float, default = sys_paras['a'], help = "lattice spacing")
-    parser.add_argument("--meas_freq", type = int, default = sys_paras['meas_freq'], help = "frequencey of measurement")
     parser.add_argument("--write_times", type = int, default = sys_paras['write_times'], help = "times of data write-out")
 
     parser.add_argument("--lfl", type = int, default = sim_paras['lfl'], help = "number of Leapfrog steps for each trajectory")
@@ -42,7 +41,6 @@ def update_paras():
         'seed': args.seed,
         'L': args.L,
         'a': args.a,
-        'meas_freq': args.meas_freq,
         'write_times': args.write_times
     })
     
@@ -75,13 +73,14 @@ def run_simulation_temp(T=0.892, logger=None):
     end_time_sim = time.time()
     sim_time = end_time_sim - start_time_sim
     
-    # Plottings
+    # plotting
     plot_spin_config(xy_system.data, spin_config, sim_paras['folder_temp']) # the last configuration
 
     logger.info(f"Simulation Completed (L^2 = {xy_system.data['L']}^2, T = {T:.2f})\nTotal Simulation Time = {sim_time:.2f} seconds")
     
     # Save the parameters in a JSON file
     para_file_path = os.path.join(sim_paras['folder_temp'], "config.json")
+    
     all_parameters = {
         "sys_paras": sys_paras,
         "sim_paras": sim_paras,

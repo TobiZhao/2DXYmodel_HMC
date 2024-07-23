@@ -21,7 +21,7 @@ Project structure:
     │   └── vortex_func.py
     └── utils/
         ├── logging.py
-        ├── plottings.py
+        ├── plotting.py
         ├── proc_data.py
         └── proc_data_func.py
 ```
