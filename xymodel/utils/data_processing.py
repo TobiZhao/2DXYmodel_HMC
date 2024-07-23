@@ -1,97 +1,132 @@
+#===============================================================================
+# Data Processing Functions for 2D XY Model Simulation Results
+#===============================================================================
+
 import os
 import json
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
-
 from xymodel import *
 
-# ================================================================================================
+#===============================================================================
+# Loading Reference Data
+#===============================================================================
+
 def load_ref_data(ref_data_file):
+    """
+    Load reference data from a file and organize it into a dictionary.
+
+    Parameters:
+    ref_data_file (str): Path to the reference data file.
+
+    Returns:
+    dict: A dictionary containing various physical quantities as reference.
+    """
+    # Initialize dictionary to store different physical quantities
     ref_data = {
-        'temp': [],
-        'autocorre_fit_tau': [],
-        'energy': [],
-        'sh': [],
-        'sus': [],
-        'corre_len': [],
-        'corre_len_av': []
+        'temp': [],                # Temperature
+        'autocorre_fit_tau': [],   # Autocorrelation fit tau
+        'energy': [],              # Energy (note: stored as negative of input)
+        'sh': [],                  # Specific heat
+        'sus': [],                 # Susceptibility
+        'corre_len': [],           # Correlation length
+        'corre_len_av': []         # Average correlation length
     }
 
     with open(ref_data_file, 'r') as f:
-        # skip the header line
+        # Skip the header line
         next(f)
-        
+       
         for line in f:
+            # Split each line into values
             values = line.split()
-                        
+                       
+            # Populate the ref_data dictionary
             ref_data['temp'].append(float(values[0]))
             ref_data['autocorre_fit_tau'].append(float(values[1]))
-            ref_data['energy'].append(-float(values[2]))
+            ref_data['energy'].append(-float(values[2]))  # Note the negation
             ref_data['sh'].append(float(values[3]))
             ref_data['sus'].append(float(values[4]))
+            
+            # Handle potential '-' values for correlation lengths
             ref_data['corre_len'].append(float(values[5]) if values[5] != '-' else float('nan'))
             ref_data['corre_len_av'].append(float(values[6]) if values[6] != '-' else float('nan'))
+
     return ref_data
 
+#===============================================================================
+# Temperature Point Processing
+#===============================================================================
+
 def process_data_temp_point(para_data, data_folder):
-    # requiring the data_folder containing jobs from the same batch
-    
+    """
+    Process data for a specific temperature point from a batch of jobs with raw data.
+
+    Parameters:
+    para_data (dict): Parameters for data processing.
+    data_folder (str): Path to the folder containing job data.
+
+    This function processes data from multiple subfolders, and computes various physical quantities and statistics in each.
+    """
+    # Iterate through subfolders in the data_folder
     for subfolder in os.listdir(data_folder):
         folder_temp = os.path.join(data_folder, subfolder)
         
         print('Processing folder:', folder_temp)
         
+        # Initialize dictionary to store processed data
         data_temp = {
-            'T': np.nan,
-            'L': np.nan,
+            'T': np.nan,                     # Temperature
+            'L': np.nan,                     # System size
             'meas_freq': para_data['meas_freq'],
             'max_sep_t': para_data['max_sep_t'],
             'max_sep_n': para_data['max_sep_n'],
-            'num_traj': [],
-            'energy': [],
-            'magnetization': [],
-            'magnetization_all': [], # for computing autocorrelations
-            'mx': [],
-            'my': [],
-            'delta_H': [],
-            'vor_den': [],
-            'heli_mod': [],
-            'avg_mx_cur': [],
-            'avg_my_cur': [],
-            'avg_exp_delta_H_cur': [],
-            'acc_rate_tot': np.nan,
-            'avg_energy': np.nan,
-            'se_energy': np.nan,
-            'sus': np.nan,
-            'se_sus': np.nan,
-            'avg_vor_den': np.nan,
-            'se_vor_den': np.nan,
-            'avg_heli_mod': np.nan,
-            'se_heli_mod': np.nan,
-            'bdc': np.nan,
-            'se_bdc': np.nan,
-            'avg_gm': [],
-            'se_gm': [],
-            'eff_m': [],
-            'se_eff_m': [],
-            'corre_fit_c': np.nan,
-            'sd_corre_fit_c': np.nan,
-            'corre_fit_m': np.nan,
-            'sd_corre_fit_m': np.nan,
-            'corre_len': np.nan,
-            'sd_corre_len': np.nan,
-            'rho': [],
-            'se_rho': [],
-            'autocorre_fit_b': np.nan,
-            'sd_autocorre_fit_b': np.nan,
-            'autocorre_fit_tau': np.nan,
-            'sd_autocorre_fit_tau': np.nan,
-            'cutoff_win': np.nan,
-            'tau_int': np.nan,
-            'se_tau_int': np.nan
+            'num_traj': [],                  # Number of trajectories
+            'energy': [],                    # Energy values
+            'magnetization': [],             # Magnetization values
+            'magnetization_all': [],         # All magnetization data for autocorrelations
+            'mx': [],                        # x-component of magnetization
+            'my': [],                        # y-component of magnetization
+            'delta_H': [],                   # Change in Hamiltonian
+            'vor_den': [],                   # Vortex density
+            'heli_mod': [],                  # Helicity modulus
+            'avg_mx_cur': [],                # Running average of mx
+            'avg_my_cur': [],                # Running average of my
+            'avg_exp_delta_H_cur': [],       # Running average of exp(-delta_H)
+            'acc_rate_tot': np.nan,          # Total acceptance rate
+            'avg_energy': np.nan,            # Average energy
+            'se_energy': np.nan,             # Standard error of energy
+            'sus': np.nan,                   # Susceptibility
+            'se_sus': np.nan,                # Standard error of susceptibility
+            'avg_vor_den': np.nan,           # Average vortex density
+            'se_vor_den': np.nan,            # Standard error of vortex density
+            'avg_heli_mod': np.nan,          # Average helicity modulus
+            'se_heli_mod': np.nan,           # Standard error of helicity modulus
+            'bdc': np.nan,                   # Binder cumulant
+            'se_bdc': np.nan,                # Standard error of Binder cumulant
+            'avg_gm': [],                    # Average correlation function
+            'se_gm': [],                     # Standard error of correlation function
+            'eff_m': [],                     # Effective mass
+            'se_eff_m': [],                  # Standard error of effective mass
+            'corre_fit_c': np.nan,           # Correlation fit parameter c
+            'sd_corre_fit_c': np.nan,        # Standard deviation of c
+            'corre_fit_m': np.nan,           # Correlation fit parameter m
+            'sd_corre_fit_m': np.nan,        # Standard deviation of m
+            'corre_len': np.nan,             # Correlation length
+            'sd_corre_len': np.nan,          # Standard deviation of correlation length
+            'rho': [],                       # Autocorrelation function
+            'se_rho': [],                    # Standard error of autocorrelation function
+            'autocorre_fit_b': np.nan,       # Autocorrelation fit parameter b
+            'sd_autocorre_fit_b': np.nan,    # Standard deviation of b
+            'autocorre_fit_tau': np.nan,     # Autocorrelation fit parameter tau
+            'sd_autocorre_fit_tau': np.nan,  # Standard deviation of tau
+            'cutoff_win': np.nan,            # Cutoff window for integrated autocorrelation time
+            'tau_int': np.nan,               # Integrated autocorrelation time
+            'se_tau_int': np.nan             # Standard error of integrated autocorrelation time
         }
         
+        # Load configuration settings
         with open(os.path.join(folder_temp, 'config.json'), 'r') as json_file:
             settings = json.load(json_file)
             data_temp['T'] = settings.get('sim_paras', {}).get('T', 0.892)
@@ -99,25 +134,25 @@ def process_data_temp_point(para_data, data_folder):
             L = data_temp['L']
             N = L ** 2
 
+        # Process raw data
         with open(os.path.join(folder_temp, f'raw_data_T{data_temp["T"]:.2f}.txt'), 'r') as raw_data:
-            # skip the header line, and store the last line separately
+            # Skip header line and store last line separately
             lines = raw_data.readlines()
             data_lines = lines[1:-1]
             last_line = lines[-1]
             
-            # extract the data
+            # Extract data from each line
             for count, line in enumerate(data_lines):
-                # split the line
                 parts = line.split('[') 
                 values = parts[0].split()
                 
-                # store all the magnetization data if processing autocorrelations
+                # Store all magnetization data if processing autocorrelations
                 if para_data['proc_autocorre']:
                     data_temp['magnetization_all'].append(float(values[2]))
                 
-                # extract data by the frequency of measurement
+                # Extract data by measurement frequency
                 if (count + 1) % para_data['meas_freq'] == 0:
-                    # extract scalar data
+                    # Extract scalar data
                     data_temp['num_traj'].append(int(values[0]))
                     data_temp['energy'].append(float(values[1]))
                     data_temp['magnetization'].append(float(values[2]))
@@ -131,18 +166,17 @@ def process_data_temp_point(para_data, data_folder):
                     if para_data['proc_heli_mod']:
                         data_temp['heli_mod'].append(float(values[10]))
 
-                    # compute ensemble averages till current number of trajectory
+                    # Compute running averages
                     data_temp['avg_mx_cur'].append(np.mean(data_temp['mx']))
                     data_temp['avg_my_cur'].append(np.mean(data_temp['my']))
                     data_temp['avg_exp_delta_H_cur'].append(np.mean(np.exp(-np.array(data_temp['delta_H']))))
             
-            # save the total values from the last line
+            # Process last line for total values
             parts_last = last_line.split('[') 
             values_last = parts_last[0].split()
-
             data_temp['acc_rate_tot'] = float(values_last[5])
             
-            # process correlations
+            # Process correlations if requested
             if para_data['proc_corre']:
                 avg_gm_all = np.fromstring(parts_last[1].split(']')[0], sep = ',')
                 var_gm_all = np.fromstring(parts_last[2].split(']')[0], sep = ',')
@@ -164,11 +198,11 @@ def process_data_temp_point(para_data, data_folder):
                 data_temp['corre_fit_m'] = m
                 data_temp['sd_corre_fit_m'] = m_sd
                 data_temp['corre_len'] = 1 / m
-                data_temp['sd_corre_len'] = m_sd / (m * m) # from the error propagation formular, btw m * m is faster that m**2
+                data_temp['sd_corre_len'] = m_sd / (m * m) # Error propagation formula
                 
                 plot_correlations(data_temp, path = folder_temp)
         
-        # process autocorrelations
+        # Process autocorrelations if requested
         if para_data['proc_autocorre']:
             rho, se_rho = compute_autocorre_func(data_temp, para_data['max_sep_n'])
 
@@ -185,7 +219,7 @@ def process_data_temp_point(para_data, data_folder):
             
             plot_autocorrelations(data_temp, path = folder_temp)
         
-        # compute the Binder cumulant
+        # Compute Binder cumulant if requested
         if para_data['proc_bdc']:
             mag = np.array(data_temp['magnetization'])
             m2 = mag * mag
@@ -204,7 +238,7 @@ def process_data_temp_point(para_data, data_folder):
             data_temp['bdc'] = bdc
             data_temp['se_bdc'] = se_bdc
             
-        # compute ensemble averages
+        # Compute ensemble averages
         if para_data['proc_energy']:
             data_temp['avg_energy'] = np.mean(data_temp['energy'])
             data_temp['se_energy'] = np.std(data_temp['energy'], ddof = 1) / L
@@ -216,12 +250,12 @@ def process_data_temp_point(para_data, data_folder):
             data_temp['avg_heli_mod'] = np.mean(data_temp['heli_mod'])
             data_temp['se_heli_mod'] = np.std(data_temp['heli_mod']) / L
             
-        if para_data['proc_sus']: # susceptibility
+        if para_data['proc_sus']: # Susceptibility
             sus_list = np.array(data_temp['magnetization']) * np.array(data_temp['magnetization']) * N
             data_temp['sus'] = np.mean(sus_list)
             data_temp['se_sus'] = np.std(sus_list, ddof = 1) / L
         
-        # plottings of raw data
+        # Plot raw data and processed results
         plot_raw_data_basic(data_temp, path = folder_temp)
         
         if para_data['proc_vor_den']:
@@ -229,10 +263,9 @@ def process_data_temp_point(para_data, data_folder):
         if para_data['proc_heli_mod']:
             plot_raw_data_heli_mod(data_temp, path = folder_temp)
         
-        # plotting of average values of energy, and components of magnitization
         plot_ensemble_averages(data_temp, path = folder_temp)
 
-        # export total values
+        # Export total values to JSON file
         output_data = {
             'acc_rate': data_temp['acc_rate_tot'],
             'energy': data_temp['avg_energy'],
@@ -264,13 +297,20 @@ def process_data_temp_point(para_data, data_folder):
         with open(output_file, 'w') as outfile:
             json.dump(output_data, outfile, indent=4)
 
-#=======================================================================================================================================================
+#===============================================================================
+# Temperature Range Processing
+#===============================================================================
 
 def process_data_temp_range(para_data, ref_data, data_folder):
-    # process data from the same batch of jobs (generated under a range of temperatures, with other parameters unchanged)
+    """
+    Process data from a batch of jobs generated under a range of temperatures.
+
+    This function aggregates and processes data across a temperature range, computes various physical quantities, and generates plots for analysis.
+    """
     print("=" * 100)
     print("Processing data under the range of temperature...")
 
+    # Initialize dictionary to store data across temperature range
     data_range = {
         'temp': [],
         'L': np.nan,
@@ -304,9 +344,11 @@ def process_data_temp_range(para_data, ref_data, data_folder):
         'sd_tau_int': []
     }
         
+    # Process each subfolder (each temperature point)
     for subfolder in os.listdir(data_folder):
         folder_temp = os.path.join(data_folder, subfolder)
         
+        # Load configuration settings
         with open(os.path.join(folder_temp, 'config.json'), 'r') as json_file:
             settings = json.load(json_file)
             data_range['L'] = int(settings.get('sys_paras', {}).get('L'))
@@ -318,86 +360,59 @@ def process_data_temp_range(para_data, ref_data, data_folder):
             L = data_range['L']
             N = L ** 2
 
+        # Load and process values for each temperature point
         with open(os.path.join(folder_temp, f'values_T{temp:.2f}.json'), 'r') as values_file:
-            # load the values as a dictionary
             data_values = json.load(values_file)
             
-            # append data to the data_range lists
-            data_range['energy'].append(data_values['energy'])
-            data_range['se_energy'].append(data_values['se_energy'])
-            data_range['sus'].append(data_values['sus'])
-            data_range['se_sus'].append(data_values['se_sus'])
-            data_range['vor_den'].append(data_values['vor_den'])
-            data_range['se_vor_den'].append(data_values['se_vor_den'])
-            data_range['heli_mod'].append(data_values['heli_mod'])
-            data_range['se_heli_mod'].append(data_values['se_heli_mod'])
-            data_range['bdc'].append(data_values['bdc'])
-            data_range['se_bdc'].append(data_values['se_bdc'])
-            data_range['corre_fit_c'].append(data_values['corre_fit_c'])
-            data_range['sd_corre_fit_c'].append(data_values['sd_corre_fit_c'])
-            data_range['corre_fit_m'].append(data_values['corre_fit_m'])
-            data_range['sd_corre_fit_m'].append(data_values['sd_corre_fit_m'])
-            data_range['corre_len'].append(data_values['corre_len'])
-            data_range['sd_corre_len'].append(data_values['sd_corre_len'])
-            data_range['autocorre_fit_b'].append(data_values['autocorre_fit_b'])
-            data_range['sd_autocorre_fit_b'].append(data_values['sd_autocorre_fit_b'])
-            data_range['autocorre_fit_tau'].append(data_values['autocorre_fit_tau'])
-            data_range['sd_autocorre_fit_tau'].append(data_values['sd_autocorre_fit_tau'])
-            data_range['cutoff_win'].append(data_values['cutoff_win'])
-            data_range['tau_int'].append(data_values['tau_int'])
-            data_range['sd_tau_int'].append(data_values['se_tau_int'])
+            # Append data to the data_range lists
+            for key in data_values:
+                if key in data_range:
+                    data_range[key].append(data_values[key])
         
+        # Compute specific heat if requested
         if para_data['proc_sh']:
             with open(os.path.join(folder_temp, f'raw_data_T{temp:.2f}.txt'), 'r') as raw_data:
-                #print('Specific heat:', f'T = {temp:.2f}', ' num_traj =', num_traj, ' meas_freq =', para_data['meas_freq'], ' num_measured_samples =', int(num_traj / para_data['meas_freq']), ' num_bin =', para_data['num_bin'], ' bin_size =', int(num_traj / para_data['meas_freq'] / para_data['num_bin']))
-                
                 energy_raw = []
                 
-                # skip the header line
+                # Skip the header line
                 lines = raw_data.readlines()
                 data_lines = lines[1:-1]
                 
-                # extract the data
+                # Extract energy data by measurement frequency
                 for count, line in enumerate(data_lines):
-                    # split the line
                     parts = line.split('[') 
                     values = parts[0].split()
                     
-                    # extract energy data by the frequency of measurement
                     if (count + 1) % para_data['meas_freq'] == 0:
                         energy_raw.append(float(values[1]))
                 
-                # compute the specific heat
+                # Compute specific heat
                 sh = np.var(energy_raw, ddof = 1) * N / temp ** 2
-                
                 data_range['sh'].append(sh)
                 
+                # Use binning method to compute errors
                 bin_size = int(len(energy_raw) / para_data['num_bin'])
-                bin_count = 0
                 sh_bins = []
                 
-                for i in range(0, len(energy_raw), bin_size): # use the binning method to compute errors by increasing the number of bins until the variances converge
-                    bin_count += 1
+                for i in range(0, len(energy_raw), bin_size):
                     energies_bin = energy_raw[i:i + bin_size]
-                    
-                    sh_bin = np.var(energies_bin, ddof = 1) * (L / temp) * (L / temp)
-                    
+                    sh_bin = np.var(energies_bin, ddof = 1) * (L / temp) ** 2
                     sh_bins.append(sh_bin)
                 
                 se_sh = np.std(sh_bins, ddof = 1) / np.sqrt(len(sh_bins))
-                
                 data_range['se_sh'].append(se_sh)
         else:
             data_range['sh'].append(np.nan)
             data_range['se_sh'].append(np.nan)
     
+    # Create output folder for temperature range data
     data_folder_range = os.path.join(data_folder, "data_range")
     os.makedirs(data_folder_range, exist_ok = True)
     
-    # data write-out to a table
+    # Write data to table
     save_as_table(data_range, data_folder_range)
 
-    # plottings
+    # Generate plots based on processed parameters
     if para_data['proc_energy']:
         plot_energy(data_range, ref_data, path=data_folder_range)
         
@@ -429,35 +444,55 @@ def process_data_temp_range(para_data, ref_data, data_folder):
     
     if para_data['proc_corre'] and para_data['proc_autocorre']:
         plot_critical_exponent(data_range, path=data_folder_range)
-    
+        
+#===============================================================================
+# Data Saving and Formatting
+#===============================================================================
+
 def save_as_table(data_range, data_folder):
-    # save the processed data in form convenient for making tables in LaTeX
+    """
+    Save processed data in a format convenient for creating tables in LaTeX.
+
+    This function creates a txt file with LaTeX-formatted entries for various physical quantities.
+    The data is organized in columns, with error values in parentheses.
+    """
+    
+    # Define the output file path
     table_file = os.path.join(data_folder, f"data_table_L{data_range['L']}.txt")
+    
     with open(table_file, mode='w', newline='', encoding='utf-8') as file:
+        # Initialize CSV writer with '&' as delimiter for LaTeX table compatibility
         writer = csv.writer(file, delimiter='&', quoting=csv.QUOTE_MINIMAL)
+        
+        # Write header row with LaTeX-formatted column names
         writer.writerow([
-            "$T$", 
-            "$n_{\\text{traj}}$", 
-            "$E$", 
-            "$C_v$", 
-            "$\\chi$", 
-            "$10^{{3}} \\rho_{\\text{vor}}$", 
-            "$\\Upsilon$",
-            "$U_4$",
-            "$c_{\\text{cor}}$",
-            "$m_{\\text{cor}}$",
-            "$\\xi$", 
-            "$b_{\\text{atcor}}$",
-            "$\\tau_{\\text{atcor}}$",
-            "$M_{\\text{win}}$",
-            "$\\tau_{\\text{int}}$"
+            "$T$",                      # Temperature
+            "$n_{\\text{traj}}$",       # Number of trajectories
+            "$E$",                      # Energy
+            "$C_v$",                    # Specific heat
+            "$\\chi$",                  # Susceptibility
+            "$10^{{3}} \\rho_{\\text{vor}}$",  # Vortex density (scaled by 10^3)
+            "$\\Upsilon$",              # Helicity modulus
+            "$U_4$",                    # Binder cumulant
+            "$c_{\\text{cor}}$",        # Correlation fit parameter c
+            "$m_{\\text{cor}}$",        # Correlation fit parameter m
+            "$\\xi$",                   # Correlation length
+            "$b_{\\text{atcor}}$",      # Autocorrelation fit parameter b
+            "$\\tau_{\\text{atcor}}$",  # Autocorrelation fit parameter tau
+            "$M_{\\text{win}}$",        # Cutoff window
+            "$\\tau_{\\text{int}}$"     # Integrated autocorrelation time
         ])
         
+        # Process and write data for each temperature point
         for i in range(len(data_range['temp'])):
+            # Format temperature
             temp = f"{data_range['temp'][i]:.2f}" 
             
+            # Format number of trajectories (in thousands)
             num_traj = f"{int(data_range['num_traj'][i] / 1000)}K"
             
+            # Format other quantities with error values in parentheses
+            # Use '-' for nan values
             energy = f"{data_range['energy'][i]:.4f}({int(data_range['se_energy'][i] * 10000)})" if not np.isnan(data_range['energy'][i]) and not np.isnan(data_range['se_energy'][i]) else '-'
             
             sh = f"{data_range['sh'][i]:.3f}({int(data_range['se_sh'][i] * 1000)})" if not np.isnan(data_range['sh'][i]) and not np.isnan(data_range['se_sh'][i]) else '-'
@@ -484,6 +519,7 @@ def save_as_table(data_range, data_folder):
             
             tau_int = f"{data_range['tau_int'][i]:.3f}({int(data_range['sd_tau_int'][i] * 1000)})" if not np.isnan(data_range['tau_int'][i]) and not np.isnan(data_range['sd_tau_int'][i]) else '-'
             
+            # Write formatted row
             writer.writerow([
                 f"${temp}$", 
                 f"${num_traj}$", 
@@ -499,5 +535,5 @@ def save_as_table(data_range, data_folder):
                 f"${autocorre_fit_b}$", 
                 f"${autocorre_fit_tau}$", 
                 f"${cutoff_win}$", 
-                f"${tau_int}$ \\\\"
+                f"${tau_int}$ \\\\" 
             ])
