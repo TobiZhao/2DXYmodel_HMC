@@ -6,11 +6,12 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-from xymodel import *
-from ..parameters import *
-from ..analysis.correlations import *
-from ..observables.vortex import *
-from ..observables.helicity_modulus import *
+from numba import jit
+
+from xymodel.parameters import *
+from xymodel.analysis.correlations import *
+from xymodel.observables.vortex import *
+from xymodel.observables.helicity_modulus import *
 
 class XYSystem:
     """
@@ -51,12 +52,14 @@ class XYSystem:
         self.attempts_count = 0
         self.acc_rate = 0
 
-        # Nearest neighbors, (right, down, left, top)
-        self.nbr = {i: ((i // L) * L + (i + 1) % L,  # Right site
-                        (i + L) % self.N,            # Down site
-                        (i // L) * L + (i - 1) % L,  # Left site
-                        (i - L) % self.N)            # Top site
-                    for i in range(self.N)}
+        # Nearest neighbors (right, down, left, top)
+        self.nbr = np.zeros((self.N, 4), dtype=np.int64)
+
+        for i in range(self.N):
+            self.nbr[i, 0] = (i // L) * L + (i + 1) % L  # Right site
+            self.nbr[i, 1] = (i + L) % self.N            # Down site
+            self.nbr[i, 2] = (i // L) * L + (i - 1) % L  # Left site
+            self.nbr[i, 3] = (i - L) % self.N            # Top site
         
         # Initialization
         self.spin_config = np.random.random(self.N) * 2 * np.pi
@@ -75,40 +78,59 @@ class XYSystem:
             **{key: None for key in self.NONE_KEYS}
         }
     
-    def compute_energy(self, spin_config):
+    @staticmethod
+    @jit(nopython=True)
+    def compute_energy(spin_config, nbr):
         """
-        Compute the total energy of the system (float).
+        Compute the total energy of the system using vectorized operations and Numba.
         """
-        nbr_spin_diff = spin_config[:, None] - spin_config[np.array(list(self.nbr.values()))]
-        energy = -np.sum(np.cos(nbr_spin_diff))
-        return energy / 2  # Avoid double counting
+        N = len(spin_config)
+        energy = 0.0
+        for i in range(N):
+            for j in range(4):  # 4 neighbors
+                neighbor = nbr[i, j]
+                spin_diff = spin_config[i] - spin_config[neighbor]
+                energy -= np.cos(spin_diff)
+        return energy / 2  # Divide by 2 to avoid double counting
     
-    def compute_action(self, spin_config):
+    @staticmethod
+    @jit(nopython=True)
+    def compute_action(spin_config, nbr, T):
         """
-        Compute the action of the system (float).
+        Compute the action of the system using vectorized operations and Numba.
         """
-        nbr_spin_diff = spin_config[:, None] - spin_config[np.array(list(self.nbr.values()))]
-        action = -np.sum(np.cos(nbr_spin_diff) / self.data['T'])
-        return action / 2
+        N = len(spin_config)
+        action = 0.0
+        for i in range(N):
+            for j in range(4):  # 4 neighbors
+                neighbor = nbr[i, j]
+                spin_diff = spin_config[i] - spin_config[neighbor]
+                action -= np.cos(spin_diff) / T
+        return action / 2  # Divide by 2 to avoid double counting
 
-    def compute_Hamiltonian(self, spin_config, momentum):
+    @staticmethod
+    @jit(nopython=True)
+    def compute_deriv(spin_config, nbr, T):
         """
-        Compute the Hamiltonian of the system (float).
+        Compute the derivative of the action using vectorized operations and Numba.
         """
-        ke = sum([p ** 2 for p in momentum]) / 2
-        pe = self.compute_action(spin_config)
-        
-        H = ke + pe
-        return H
-    
-    def compute_deriv(self, spin_config):
-        """
-        Compute the derivative of the action (ndarray).
-        """
-        nbr_spin_diff = spin_config[:, None] - spin_config[np.array(list(self.nbr.values()))]
-        deriv = np.sum(np.sin(nbr_spin_diff) / self.data['T'], axis=1)
+        N = len(spin_config)
+        deriv = np.zeros_like(spin_config)
+        for i in range(N):
+            for j in range(4):  # 4 neighbors
+                neighbor = nbr[i, j]
+                spin_diff = spin_config[i] - spin_config[neighbor]
+                deriv[i] += np.sin(spin_diff) / T
         return deriv
     
+    def compute_Hamiltonian(spin_config, momentum, nbr, T):
+        """
+        Compute the Hamiltonian of the system.
+        """
+        ke = np.sum(momentum**2) / 2
+        pe = XYSystem.compute_action(spin_config, nbr, T)
+        return ke + pe
+        
     def Metropolis_choice(self, delta_H):
         """
         Make a Metropolis-Hastings acceptance decision (bool).
@@ -137,7 +159,7 @@ class XYSystem:
         p_old = np.random.normal(0, 1, np.shape(theta_old))
         
         # First half-step for momenta
-        deriv = self.compute_deriv(theta_old)
+        deriv = self.compute_deriv(theta_old, self.nbr, self.data['T'])
         delta_p_half = -0.5 * lfeps * deriv        
         p_new = p_old + delta_p_half
         
@@ -146,20 +168,20 @@ class XYSystem:
         
         # (lfl-1) full steps for momenta and positions
         for _ in range(lfl - 1):
-            deriv = self.compute_deriv(theta_new)
+            deriv = self.compute_deriv(theta_new, self.nbr, self.data['T'])
             delta_p = -lfeps * deriv
             p_new = p_new + delta_p
             delta_theta = lfeps * p_new
             theta_new = theta_new + delta_theta
         
         # Last half-step for momenta
-        deriv = self.compute_deriv(theta_new)
+        deriv = self.compute_deriv(theta_new, self.nbr, self.data['T'])
         delta_p_half = -0.5 * lfeps * deriv
         p_new = p_new + delta_p_half
 
         # Compute the difference in Hamiltonian
-        H_old = self.compute_Hamiltonian(theta_old, p_old)
-        H_new = self.compute_Hamiltonian(theta_new, p_new)
+        H_old = XYSystem.compute_Hamiltonian(theta_old, p_old, self.nbr, self.data['T'])
+        H_new = XYSystem.compute_Hamiltonian(theta_new, p_new, self.nbr, self.data['T'])
         delta_H = H_new - H_old
         self.delta_H = delta_H
         
@@ -221,7 +243,7 @@ class XYSystem:
         '''
         Measure and save raw data of energy and magnetization.
         '''
-        energy = self.compute_energy(spin_config) / self.N
+        energy = self.compute_energy(spin_config, self.nbr) / self.N
         mx = np.sum(np.cos(spin_config)) / self.N
         my = np.sum(np.sin(spin_config)) / self.N
         m = np.sqrt(mx**2 + my**2) 
