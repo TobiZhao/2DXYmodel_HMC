@@ -6,7 +6,7 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-from numba import jit
+from numba import njit, prange
 
 from xymodel.parameters import *
 from xymodel.analysis.correlations import *
@@ -77,60 +77,7 @@ class XYSystem:
             **{key: [] for key in self.EMPTY_LIST_KEYS},
             **{key: None for key in self.NONE_KEYS}
         }
-    
-    @staticmethod
-    @jit(nopython=True)
-    def compute_energy(spin_config, nbr):
-        """
-        Compute the total energy of the system using vectorized operations and Numba.
-        """
-        N = len(spin_config)
-        energy = 0.0
-        for i in range(N):
-            for j in range(4):  # 4 neighbors
-                neighbor = nbr[i, j]
-                spin_diff = spin_config[i] - spin_config[neighbor]
-                energy -= np.cos(spin_diff)
-        return energy / 2  # Divide by 2 to avoid double counting
-    
-    @staticmethod
-    @jit(nopython=True)
-    def compute_action(spin_config, nbr, T):
-        """
-        Compute the action of the system using vectorized operations and Numba.
-        """
-        N = len(spin_config)
-        action = 0.0
-        for i in range(N):
-            for j in range(4):  # 4 neighbors
-                neighbor = nbr[i, j]
-                spin_diff = spin_config[i] - spin_config[neighbor]
-                action -= np.cos(spin_diff) / T
-        return action / 2  # Divide by 2 to avoid double counting
-
-    @staticmethod
-    @jit(nopython=True)
-    def compute_deriv(spin_config, nbr, T):
-        """
-        Compute the derivative of the action using vectorized operations and Numba.
-        """
-        N = len(spin_config)
-        deriv = np.zeros_like(spin_config)
-        for i in range(N):
-            for j in range(4):  # 4 neighbors
-                neighbor = nbr[i, j]
-                spin_diff = spin_config[i] - spin_config[neighbor]
-                deriv[i] += np.sin(spin_diff) / T
-        return deriv
-    
-    def compute_Hamiltonian(spin_config, momentum, nbr, T):
-        """
-        Compute the Hamiltonian of the system.
-        """
-        ke = np.sum(momentum**2) / 2
-        pe = XYSystem.compute_action(spin_config, nbr, T)
-        return ke + pe
-        
+   
     def Metropolis_choice(self, delta_H):
         """
         Make a Metropolis-Hastings acceptance decision (bool).
@@ -159,7 +106,7 @@ class XYSystem:
         p_old = np.random.normal(0, 1, np.shape(theta_old))
         
         # First half-step for momenta
-        deriv = self.compute_deriv(theta_old, self.nbr, self.data['T'])
+        deriv = compute_deriv(theta_old, self.nbr, self.data['T'])
         delta_p_half = -0.5 * lfeps * deriv        
         p_new = p_old + delta_p_half
         
@@ -168,20 +115,20 @@ class XYSystem:
         
         # (lfl-1) full steps for momenta and positions
         for _ in range(lfl - 1):
-            deriv = self.compute_deriv(theta_new, self.nbr, self.data['T'])
+            deriv = compute_deriv(theta_new, self.nbr, self.data['T'])
             delta_p = -lfeps * deriv
             p_new = p_new + delta_p
             delta_theta = lfeps * p_new
             theta_new = theta_new + delta_theta
         
         # Last half-step for momenta
-        deriv = self.compute_deriv(theta_new, self.nbr, self.data['T'])
+        deriv = compute_deriv(theta_new, self.nbr, self.data['T'])
         delta_p_half = -0.5 * lfeps * deriv
         p_new = p_new + delta_p_half
 
         # Compute the difference in Hamiltonian
-        H_old = XYSystem.compute_Hamiltonian(theta_old, p_old, self.nbr, self.data['T'])
-        H_new = XYSystem.compute_Hamiltonian(theta_new, p_new, self.nbr, self.data['T'])
+        H_old = compute_Hamiltonian(theta_old, p_old, self.nbr, self.data['T'])
+        H_new = compute_Hamiltonian(theta_new, p_new, self.nbr, self.data['T'])
         delta_H = H_new - H_old
         self.delta_H = delta_H
         
@@ -243,7 +190,7 @@ class XYSystem:
         '''
         Measure and save raw data of energy and magnetization.
         '''
-        energy = self.compute_energy(spin_config, self.nbr) / self.N
+        energy = compute_energy(spin_config, self.nbr) / self.N
         mx = np.sum(np.cos(spin_config)) / self.N
         my = np.sum(np.sin(spin_config)) / self.N
         m = np.sqrt(mx**2 + my**2) 
@@ -375,3 +322,65 @@ class XYSystem:
             self.logger.info('=' * 100)
         
         return spin_config
+    
+@njit(parallel=True, fastmath=True)  # Enable parallelization and fast math operations
+def compute_energy(spin_config, nbr):
+    """
+    Compute the total energy of the system using Numba.
+    """
+    N = len(spin_config)
+    # Initialize energy array with zeros, using float32 for better performance
+    energy = np.zeros(N, dtype=np.float32)
+    
+    # Parallel loop over all lattice sites
+    for i in prange(N):
+        # Loop over 4 nearest neighbors and calculate energy contribution of one site
+        for j in range(4):
+            neighbor = nbr[i, j]
+            spin_diff = spin_config[i] - spin_config[neighbor]
+            energy[i] -= np.cos(spin_diff)
+    
+    # Sum up all energy contributions and divide by 2 to avoid double counting
+    return np.sum(energy) / 2
+
+@njit(parallel=True, fastmath=True)
+def compute_action(spin_config, nbr, T):
+    """
+    Compute the action of the system using Numba.
+    """
+    N = len(spin_config)
+    inv_T = np.float32(1.0 / T)
+    action = np.zeros(N, dtype=np.float32)
+    
+    for i in prange(N):
+        for j in range(4):
+            neighbor = nbr[i, j]
+            spin_diff = spin_config[i] - spin_config[neighbor]
+            action[i] -= np.cos(spin_diff) * inv_T
+    return np.sum(action) / 2
+
+@njit(parallel=True, fastmath=True)
+def compute_deriv(spin_config, nbr, T):
+    """
+    Compute the derivative of the action using Numba.
+    """
+    N = len(spin_config)
+    inv_T = np.float32(1.0 / T)
+    deriv = np.zeros(N, dtype=np.float32)
+    
+    for i in prange(N):
+        local_deriv = np.float32(0.0)
+        for j in range(4):
+            neighbor = nbr[i, j]
+            spin_diff = spin_config[i] - spin_config[neighbor]
+            local_deriv += np.sin(spin_diff)
+        deriv[i] = local_deriv * inv_T
+    return deriv    
+
+def compute_Hamiltonian(spin_config, momentum, nbr, T):
+    """
+    Compute the Hamiltonian of the system.
+    """
+    ke = np.sum(momentum**2) / 2
+    pe = compute_action(spin_config, nbr, T)
+    return ke + pe

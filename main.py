@@ -1,3 +1,7 @@
+#===============================================================================
+# Execution of Simulation
+#===============================================================================
+
 # Execution of the simulation
 import argparse
 import os
@@ -6,37 +10,46 @@ import json
 
 from xymodel import *
 
-def parse_args():
-    parser = argparse.ArgumentParser(description = "Run simulation with custom parameters.")
+def parse_args_main():
+    """
+    Parse command-line arguments for customizing simulation parameters.
+    """
+    parser = argparse.ArgumentParser(description="Run simulation with custom parameters.")
 
-    parser.add_argument("--seed", type = bool, default = sys_paras['seed'], help = "seed for random number generator")
-    parser.add_argument("--L", type = int, default = sys_paras['L'], help = "lattice size")
-    parser.add_argument("--a", type = float, default = sys_paras['a'], help = "lattice spacing")
-    parser.add_argument("--write_times", type = int, default = sys_paras['write_times'], help = "times of data write-out")
+    # System parameters
+    parser.add_argument("--seed", type=bool, default=sys_paras['seed'], help="Seed for random number generator")
+    parser.add_argument("--L", type=int, default=sys_paras['L'], help="Lattice size")
+    parser.add_argument("--a", type=float, default=sys_paras['a'], help="Lattice spacing")
+    parser.add_argument("--write_times", type=int, default=sys_paras['write_times'], help="Number of times to write out data")
 
-    parser.add_argument("--lfl", type = int, default = sim_paras['lfl'], help = "number of Leapfrog steps for each trajectory")
-    parser.add_argument("--num_traj", type = int, default = sim_paras['num_traj'], help = "number of trajectories during sampling")
-    parser.add_argument("--no_lf_calib", action = 'store_false', help = "to deacticvate calibration of leapfrog parameters")
-    parser.add_argument("--log_freq", type = int, default = sim_paras['log_freq'], help = "frequency of displaying process when logging in equlibration and sampling stages")
-    parser.add_argument("--max_sep_t", type = int, default = sim_paras['max_sep_t'], help = "maximum of space separation when calculating correlation length")
+    # Simulation parameters
+    parser.add_argument("--lfl", type=int, default=sim_paras['lfl'], help="Number of Leapfrog steps for each trajectory")
+    parser.add_argument("--num_traj", type=int, default=sim_paras['num_traj'], help="Number of trajectories during sampling")
+    parser.add_argument("--no_lf_calib", action='store_false', help="Deactivate calibration of Leapfrog parameters")
+    parser.add_argument("--log_freq", type=int, default=sim_paras['log_freq'], help="Frequency of displaying progress during equilibration and sampling stages")
+    parser.add_argument("--max_sep_t", type=int, default=sim_paras['max_sep_t'], help="Maximum space separation when calculating correlation length")
 
-    parser.add_argument("--num_step_calib", type = int, default = calibration_paras['num_step_calib'], help = "number of trajectories of each calibration iteration")
-    parser.add_argument("--num_calib", type = int, default = calibration_paras['num_calib'], help = "maximal number of iterations of calibration")
+    # Calibration parameters
+    parser.add_argument("--num_step_calib", type=int, default=calibration_paras['num_step_calib'], help="Number of trajectories for each calibration iteration")
+    parser.add_argument("--num_calib", type=int, default=calibration_paras['num_calib'], help="Maximum number of calibration iterations")
 
-    parser.add_argument("--T", type = float, default = sim_paras['T'], help = "temperature of simulation")
+    # Temperature parameter
+    parser.add_argument("--T", type=float, default=sim_paras['T'], help="Simulation temperature")
 
-    # extract command-line arguments
     return parser.parse_args()
 
 def update_paras():
-    args = parse_args()
+    """
+    Update simulation parameters based on command-line arguments.
+    """
+    args = parse_args_main()
 
-    # create the output folder
+    # Create the output folder
     dir_path = os.path.dirname(os.path.abspath(__file__))
     folder_temp = os.path.join(dir_path, "output", f"L{args.L}_T{args.T:.2f}_nt{args.num_traj}")
-    os.makedirs(folder_temp, exist_ok = True)
+    os.makedirs(folder_temp, exist_ok=True)
     
-    # update the simulation parameters to command-line arguments
+    # Update the simulation parameters with command-line arguments
     sys_paras.update({
         'seed': args.seed,
         'L': args.L,
@@ -60,21 +73,27 @@ def update_paras():
     })
 
 def save_parameters(parameters, path):
+    """
+    Save parameters to a JSON file.
+    """
     with open(path, "w") as file:
-        json.dump(parameters, file, indent = 4)
+        json.dump(parameters, file, indent=4)
 
 def run_simulation_temp(T=0.892, logger=None):
+    """
+    Run the simulation at a specific temperature.
+    """
     start_time_sim = time.time()
     
-    # run the simulation
+    # Initialize and run the simulation
     xy_system = XYSystem(**sys_paras, logger=logger)
-    spin_config = xy_system.run_simulation(**sim_paras) # obtain the latest configuration for plotting
+    spin_config = xy_system.run_simulation(**sim_paras)  # Obtain the latest configuration for plotting
     
     end_time_sim = time.time()
     sim_time = end_time_sim - start_time_sim
     
-    # plotting
-    plot_spin_config(xy_system.data, spin_config, sim_paras['folder_temp']) # the last configuration
+    # Plot the final spin configuration
+    plot_spin_config(xy_system.data, spin_config, sim_paras['folder_temp'])
 
     logger.info(f"Simulation Completed (L^2 = {xy_system.data['L']}^2, T = {T:.2f})\nTotal Simulation Time = {sim_time:.2f} seconds")
     
@@ -89,11 +108,16 @@ def run_simulation_temp(T=0.892, logger=None):
     save_parameters(all_parameters, para_file_path)
 
 def main():
+    """
+    Main function to run the simulation.
+    """
     update_paras()
     
     log_file = os.path.join(sim_paras['folder_temp'], f"log_T{sim_paras['T']:.2f}.log")
     logger = setup_logging(log_file)
     
+    logger.info(100 * "=")
+    logger.info("2D XY model (v1.3.0)")
     logger.info(100 * "=")
     logger.info("Simulation Started")
     logger.info(100 * "=")

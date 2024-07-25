@@ -1,7 +1,9 @@
 """
 # HMC Simulation of 2D XY Model
+
 This package provides tools for simulating and analyzing the 2D XY model using Hamiltonian Monte Carlo (HMC) methods.
 """
+
 from setuptools import setup, find_packages
 
 with open('README.md', 'r', encoding='utf-8') as f:
@@ -9,7 +11,7 @@ with open('README.md', 'r', encoding='utf-8') as f:
 
 setup(
     name="xymodel",
-    version="1.2.0",
+    version="1.3.0",
     packages=find_packages(exclude=['tests*']),
     description="Two Dimensional XY Model Simulation using HMC",
     long_description=long_description,
