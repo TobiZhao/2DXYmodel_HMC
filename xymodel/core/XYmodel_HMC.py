@@ -107,24 +107,30 @@ class XYSystem:
         
         # First half-step for momenta
         deriv = compute_deriv(theta_old, self.nbr, self.data['T'])
-        delta_p_half = -0.5 * lfeps * deriv        
-        p_new = p_old + delta_p_half
+        
+        d_p_half = -0.5 * lfeps * deriv        
+        p = p_old + d_p_half
         
         # Full step for positions
-        theta_new = theta_old + lfeps * p_new
+        theta = theta_old + lfeps * p
         
         # (lfl-1) full steps for momenta and positions
         for _ in range(lfl - 1):
-            deriv = compute_deriv(theta_new, self.nbr, self.data['T'])
-            delta_p = -lfeps * deriv
-            p_new = p_new + delta_p
-            delta_theta = lfeps * p_new
-            theta_new = theta_new + delta_theta
+            deriv = compute_deriv(theta, self.nbr, self.data['T'])
+            
+            d_p = -lfeps * deriv
+            p += d_p
+            
+            d_theta = lfeps * p
+            theta += d_theta
+            
+        theta_new = theta
         
         # Last half-step for momenta
         deriv = compute_deriv(theta_new, self.nbr, self.data['T'])
-        delta_p_half = -0.5 * lfeps * deriv
-        p_new = p_new + delta_p_half
+        
+        d_p_half = -0.5 * lfeps * deriv
+        p_new = p + d_p_half
 
         # Compute the difference in Hamiltonian
         H_old = compute_Hamiltonian(theta_old, p_old, self.nbr, self.data['T'])
@@ -138,8 +144,78 @@ class XYSystem:
             return theta_new
         else:
             return theta_old
+        
+    def leapfrog_FA(self, theta_old, lfl=int(10), m_FA=0.1):
+        """
+        Perform a leapfrog integration step with Fourier acceleration and return the updated configuration.
+        
+        Parameters:
+        lfl: number of Leapfrog steps
+        lfeps: Leapfrog stepsize
+        m: mass parameter for Fourier acceleration kernel
+        
+        (lfl * lfeps = 1 is kept)
+        """
+        lfeps = 1 / lfl
+        
+        self.attempts_count += 1
+        L = self.L
+        
+        # Fourier transform of the given configuration in real space ("_k" denoting Fourier space)
+        theta_k = np.fft.fft(theta_old, norm='ortho')
+        
+        # Construct the kernel in Fourier space
+        k1, k2 = np.meshgrid(np.fft.fftfreq(L) * 2 * np.pi, np.fft.fftfreq(L) * 2 * np.pi)
+        K_tilde_inv_2d = 1 / (4 * (np.sin(k1/2)**2 + np.sin(k2/2)**2) + m_FA**2)
+        K_tilde_inv = K_tilde_inv_2d.flatten() # Flatten the kernel by line to maintain the correspondence
+        
+        # Sample momenta from Gaussian distribution in Fourier space
+        p_old_k = np.random.normal(0, np.sqrt(self.N / K_tilde_inv), np.shape(theta_k))
+        
+        # First half-step for momenta
+        deriv_k = compute_deriv_k(theta_k, self.nbr, self.data['T'])
+        
+        d_p_k_half = -0.5 * lfeps * deriv_k
+        p_k = p_old_k + d_p_k_half
 
-    def leapfrog_calibration(self, num_step_calib=500, acc_rate_upper=0.8, acc_rate_lower=0.6, acc_rate_ref=0.7, lfl_adj=1, num_calib=10, lfl_lower=1, lfl_upper=50):
+        # Full step for positions
+        theta_k += lfeps * K_tilde_inv * p_k
+
+        # (lfl-1) full steps for momenta and positions
+        for _ in range(lfl - 1):
+            deriv_k = compute_deriv_k(theta_k, self.nbr, self.data['T'])
+            
+            d_p_k = -lfeps * deriv_k
+            p_k += d_p_k
+            
+            d_theta_k = lfeps * K_tilde_inv * p_k
+            theta_k += d_theta_k
+            
+        theta_new_k = theta_k
+        
+        # Last half-step for momenta
+        deriv_k = compute_deriv_k(theta_new_k, self.nbr, self.data['T'])
+        
+        d_p_k_half = -0.5 * lfeps * deriv_k
+        p_new_k = p_k + d_p_k_half
+        
+        # Inverse Fourier transform to obtain values in real space
+        theta_new = np.fft.ifft(theta_new_k, norm='ortho').real
+
+        # Compute the difference in Hamiltonian
+        H_old = compute_Hamiltonian_FA(theta_old, p_old_k, K_tilde_inv, self.nbr, self.data['T'])
+        H_new = compute_Hamiltonian_FA(theta_new, p_new_k, K_tilde_inv, self.nbr, self.data['T'])
+        delta_H = H_new - H_old
+        self.delta_H = delta_H
+
+        # Metropolis acceptance step
+        if self.Metropolis_choice(delta_H):
+            self.accepted_count += 1
+            return theta_new
+        else:
+            return theta_old
+
+    def leapfrog_calibration(self, num_step_calib=500, acc_rate_upper=0.8, acc_rate_lower=0.6, acc_rate_ref=0.7, lfl_adj=1, num_calib=10, lfl_lower=1, lfl_upper=50, FA=False, m_FA=0.1):
         """
         Calibrate leapfrog parameters to control the acceptance rate.
 
@@ -162,9 +238,13 @@ class XYSystem:
             spin_config_calib = self.spin_config
             self.accepted_count = self.attempts_count = 0
             
-            for _ in range(num_step_calib):
-                spin_config_calib = self.leapfrog(spin_config_calib, lfl=lfl_cur)
-            
+            if FA:
+                for _ in range(num_step_calib):
+                    spin_config_calib = self.leapfrog_FA(spin_config_calib, lfl=lfl_cur)
+            else:
+                for _ in range(num_step_calib):
+                    spin_config_calib = self.leapfrog(spin_config_calib, lfl=lfl_cur)
+
             self.acc_rate = self.accepted_count / self.attempts_count
             
             self.logger.info(f"Calibration iteration {i + 1}/{num_calib}: lfl = {sim_paras['lfl']}, lfeps = {1/sim_paras['lfl']:.4f}, acc_rate = {self.acc_rate:.4f}")
@@ -200,7 +280,7 @@ class XYSystem:
         self.data['my'].append(my)
         self.data['magnetization'].append(m)    
         
-    def run_simulation(self, T=None, num_traj=int(1e4), lfl=10, lf_calib=True, write_times=10, log_freq=int(100), max_sep_t=5, vor_thld=0.01, folder_temp=None):
+    def run_simulation(self, T=None, num_traj=int(1e4), lfl=10, lf_calib=True, write_times=10, log_freq=int(100), max_sep_t=5, vor_thld=0.01, folder_temp=None, FA=False, m_FA=0.1):
         """
         Run the simulation.
 
@@ -216,7 +296,8 @@ class XYSystem:
             folder_temp (str, optional): Temporary folder for output. Defaults to None.
         """
         # Initialization
-        spin_config = self.spin_config
+        spin_config = self.spin_config # Generate a random spin configuration in the real space
+        
         self.data['T'] = T
         raw_data_path = os.path.join(folder_temp, f"raw_data_T{T:.2f}.txt")
         
@@ -239,7 +320,7 @@ class XYSystem:
             self.logger.info(f"Simulation at T = {T:.2f} Terminated")
             self.logger.info('=' * 100)
             return spin_config
-
+        
         # Burn-in stage
         self.accepted_count = self.attempts_count = 0  # Reset counters
         self.logger.info('-' * 100)
@@ -248,7 +329,11 @@ class XYSystem:
         
         with tqdm(total=equi_steps, desc="Equilibrating", ncols=100) as pbar:
             for n in range(equi_steps):
-                spin_config = self.leapfrog(spin_config, sim_paras['lfl'])
+                if FA:
+                    spin_config = self.leapfrog_FA(spin_config, sim_paras['lfl'], m_FA)
+                else:
+                    spin_config = self.leapfrog(spin_config, sim_paras['lfl'])
+                    
                 if (n + 1) % log_freq == 0:
                     pbar.update(log_freq)
                     self.logger.realtime(f'Equilibrating: trajectories {n + 1} / {equi_steps}')           
@@ -262,7 +347,10 @@ class XYSystem:
         
         with tqdm(total=num_traj, desc="Sampling", ncols=100, leave=False) as pbar:
             for t in range(num_traj): 
-                spin_config = self.leapfrog(spin_config, lfl=sim_paras['lfl'])  # Evolve the system
+                if FA:
+                    spin_config = self.leapfrog_FA(spin_config, sim_paras['lfl'], m_FA)
+                else:
+                    spin_config = self.leapfrog(spin_config, sim_paras['lfl'])
                 
                 if (t + 1) % log_freq == 0:
                     pbar.update(log_freq)
@@ -328,6 +416,7 @@ def compute_energy(spin_config, nbr):
     """
     Compute the total energy of the system using Numba.
     """
+    #print(spin_config)
     N = len(spin_config)
     # Initialize energy array with zeros, using float32 for better performance
     energy = np.zeros(N, dtype=np.float32)
@@ -377,10 +466,40 @@ def compute_deriv(spin_config, nbr, T):
         deriv[i] = local_deriv * inv_T
     return deriv    
 
+#@njit(parallel=True, fastmath=True)
+def compute_deriv_k(spin_config_k, nbr, T):
+    """
+    Compute the derivative of the action in Fourier space using Numba.
+    """
+    spin_config = np.fft.ifft(spin_config_k, norm='ortho').real
+    
+    N = len(spin_config)
+    inv_T = np.float32(1.0 / T)
+    deriv = np.zeros(N, dtype=np.float32)
+    
+    for i in prange(N):
+        local_deriv = np.float32(0.0)
+        for j in range(4):
+            neighbor = nbr[i, j]
+            spin_diff = spin_config[i] - spin_config[neighbor]
+            local_deriv += np.sin(spin_diff)
+        deriv[i] = local_deriv * inv_T
+    
+    deriv_k = np.fft.fft(deriv, norm='ortho')
+    return deriv_k
+
 def compute_Hamiltonian(spin_config, momentum, nbr, T):
     """
     Compute the Hamiltonian of the system.
     """
-    ke = np.sum(momentum**2) / 2
+    ke = 0.5 * np.sum(momentum**2)
+    pe = compute_action(spin_config, nbr, T)
+    return ke + pe
+
+def compute_Hamiltonian_FA(spin_config, momentum_k, K_tilde_inv, nbr, T):
+    """
+    Compute the Hamiltonian of the system in Fourier accelerated HMC.
+    """
+    ke = 0.5 * np.sum(momentum_k * K_tilde_inv * np.conj(momentum_k)).real
     pe = compute_action(spin_config, nbr, T)
     return ke + pe

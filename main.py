@@ -24,6 +24,8 @@ def parse_args_main():
 
     # Simulation parameters
     parser.add_argument("--lfl", type=int, default=sim_paras['lfl'], help="Number of Leapfrog steps for each trajectory")
+    parser.add_argument("--FA", action='store_true', default=sim_paras['FA'], help="Activate Fourier acceleration")
+    parser.add_argument("--m_FA", type=float, default=sim_paras['m_FA'], help="Number of trajectories during sampling")
     parser.add_argument("--num_traj", type=int, default=sim_paras['num_traj'], help="Number of trajectories during sampling")
     parser.add_argument("--no_lf_calib", action='store_false', help="Deactivate calibration of Leapfrog parameters")
     parser.add_argument("--log_freq", type=int, default=sim_paras['log_freq'], help="Frequency of displaying progress during equilibration and sampling stages")
@@ -59,6 +61,8 @@ def update_paras():
     
     sim_paras.update({
         'T': args.T,
+        'FA': args.FA,
+        'm_FA': args.m_FA,
         'lfl': args.lfl,
         'num_traj': args.num_traj,
         'lf_calib': args.no_lf_calib,
