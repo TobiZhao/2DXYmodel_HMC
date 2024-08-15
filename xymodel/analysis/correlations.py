@@ -15,13 +15,10 @@ def compute_zmo(spin_config):
     Returns:
         tuple: Zero momentum operators for rows and columns
     """
-    L = int(np.sqrt(len(spin_config)))
-    spin_matrix = np.reshape(spin_config, (L, L))
-
-    o_x_row = np.sum(np.cos(spin_matrix), axis=1)
-    o_y_row = np.sum(np.sin(spin_matrix), axis=1)
-    o_x_col = np.sum(np.cos(spin_matrix), axis=0)
-    o_y_col = np.sum(np.sin(spin_matrix), axis=0)
+    o_x_row = np.sum(np.cos(spin_config), axis=1)
+    o_y_row = np.sum(np.sin(spin_config), axis=1)
+    o_x_col = np.sum(np.cos(spin_config), axis=0)
+    o_y_col = np.sum(np.sin(spin_config), axis=0)
 
     o_row = np.stack((o_x_row, o_y_row), axis=-1)  # shaped (L, 2)
     o_col = np.stack((o_x_col, o_y_col), axis=-1)

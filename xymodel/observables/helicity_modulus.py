@@ -38,28 +38,31 @@ def compute_heli_mod(spin_config, T=1.02):
     Returns:
         float: Helicity modulus of the system
     """
-    # System parameters
-    N = len(spin_config)
-    L = int(np.sqrt(N))  # Lattice size
+    L = spin_config.shape[0]
+    hm = 0.0
     
-    hm = 0  # Accumulator for helicity modulus
-    
-    # Iterate over all lattice sites
     for x in range(L):
         for y in range(L):
-            # Calculate indices for current site and its neighbors
-            st = x * L + y           # Current site
-            st_r = ((x + 1) % L) * L + y  # Right neighbor (with periodic boundary)
-            st_t = x * L + (y + 1) % L    # Top neighbor (with periodic boundary)
+            # Current spin
+            s_st = np.array([np.cos(spin_config[x, y]), np.sin(spin_config[x, y])])
             
-            # Convert spin angles to 2D unit vectors
-            s_st = (np.cos(spin_config[st]), np.sin(spin_config[st]))
-            s_st_r = (np.cos(spin_config[st_r]), np.sin(spin_config[st_r]))
-            s_st_t = (np.cos(spin_config[st_t]), np.sin(spin_config[st_t]))
+            # Right neighbor (with periodic boundary)
+            s_st_r = np.array([np.cos(spin_config[(x+1)%L, y]), np.sin(spin_config[(x+1)%L, y])])
             
-            # Accumulate helicity modulus contributions
-            hm += hm_func(s_st, s_st_r, T) + hm_func(s_st, s_st_t, T)
+            # Top neighbor (with periodic boundary)
+            s_st_t = np.array([np.cos(spin_config[x, (y+1)%L]), np.sin(spin_config[x, (y+1)%L])])
+            
+            # Compute helicity modulus contributions
+            # Right neighbor
+            d_prod_r = np.dot(s_st, s_st_r)
+            cr_prod_r = s_st[0]*s_st_r[1] - s_st[1]*s_st_r[0]
+            hm += (d_prod_r - cr_prod_r * cr_prod_r / T) / T
+            
+            # Top neighbor
+            d_prod_t = np.dot(s_st, s_st_t)
+            cr_prod_t = s_st[0]*s_st_t[1] - s_st[1]*s_st_t[0]
+            hm += (d_prod_t - cr_prod_t * cr_prod_t / T) / T
     
     # Normalize by system size
-    heli_mod = hm / N
+    heli_mod = hm / (L * L)
     return heli_mod

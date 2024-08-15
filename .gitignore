@@ -23,7 +23,11 @@ scripts/
 .DS_Store
 Thumbs.db
 
+# Pseudocodes
+pseudocodes/
+
 # Others
 print_dir_struc.py
 temp.txt
 job_notes/
+example/

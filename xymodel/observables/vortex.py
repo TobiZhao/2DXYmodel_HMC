@@ -15,24 +15,18 @@ def compute_vor(spin_config, vor_thld=0.01):
     Returns:
         tuple: Number of vortices, number of anti-vortices, and vortex density.
     """
-    L = int(np.sqrt(len(spin_config)))  # Lattice size
+    L = spin_config.shape[0]  # Lattice size
     
     vor_num = 0  # Vortex count
     avor_num = 0  # Anti-vortex count
     
     for x in range(L):
         for y in range(L):
-            # Compute indices for the four vertices of the current plaquette
-            st1 = x * L + y                          # Current site
-            st2 = ((x + 1) % L) * L + y              # Top site
-            st3 = ((x + 1) % L) * L + (y + 1) % L    # Diagonal site
-            st4 = x * L + (y + 1) % L                # Right site
-            
-            # Calculate phase differences along the plaquette
-            dtheta1 = (spin_config[st2] - spin_config[st1]) % (2 * np.pi)
-            dtheta2 = (spin_config[st3] - spin_config[st2]) % (2 * np.pi)
-            dtheta3 = (spin_config[st4] - spin_config[st3]) % (2 * np.pi)
-            dtheta4 = (spin_config[st1] - spin_config[st4]) % (2 * np.pi)
+            # Compute phase differences along the plaquette
+            dtheta1 = (spin_config[(x+1)%L, y] - spin_config[x, y]) % (2 * np.pi)
+            dtheta2 = (spin_config[(x+1)%L, (y+1)%L] - spin_config[(x+1)%L, y]) % (2 * np.pi)
+            dtheta3 = (spin_config[x, (y+1)%L] - spin_config[(x+1)%L, (y+1)%L]) % (2 * np.pi)
+            dtheta4 = (spin_config[x, y] - spin_config[x, (y+1)%L]) % (2 * np.pi)
             
             # Map phase differences to [-π, π] interval
             dtheta1 = ((dtheta1 + np.pi) % (2 * np.pi)) - np.pi

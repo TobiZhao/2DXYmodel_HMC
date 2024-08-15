@@ -53,16 +53,17 @@ class XYSystem:
         self.acc_rate = 0
 
         # Nearest neighbors (right, down, left, top)
-        self.nbr = np.zeros((self.N, 4), dtype=np.int64)
+        self.nbr = np.zeros((L, L, 4), dtype=np.int64)
 
-        for i in range(self.N):
-            self.nbr[i, 0] = (i // L) * L + (i + 1) % L  # Right site
-            self.nbr[i, 1] = (i + L) % self.N            # Down site
-            self.nbr[i, 2] = (i // L) * L + (i - 1) % L  # Left site
-            self.nbr[i, 3] = (i - L) % self.N            # Top site
+        for i in range(L):
+            for j in range(L):
+                self.nbr[i, j, 0] = i * L + (j + 1) % L     # Right site
+                self.nbr[i, j, 1] = ((i + 1) % L) * L + j   # Down site
+                self.nbr[i, j, 2] = i * L + (j - 1) % L     # Left site
+                self.nbr[i, j, 3] = ((i - 1) % L) * L + j   # Top site
         
         # Initialization
-        self.spin_config = np.random.random(self.N) * 2 * np.pi
+        self.spin_config = np.random.random((L, L)) * 2 * np.pi
         self.write_times = write_times
         self.delta_H = 0
         self.stop_flag = False
@@ -99,7 +100,7 @@ class XYSystem:
         (lfl * lfeps = 1 is kept)
         '''
         lfeps = 1 / lfl
-        
+
         self.attempts_count += 1
         
         # Sample momenta from Gaussian distribution
@@ -108,7 +109,7 @@ class XYSystem:
         # First half-step for momenta
         deriv = compute_deriv(theta_old, self.nbr, self.data['T'])
         
-        d_p_half = -0.5 * lfeps * deriv        
+        d_p_half = -0.5 * lfeps * deriv
         p = p_old + d_p_half
         
         # Full step for positions
@@ -156,6 +157,8 @@ class XYSystem:
         
         (lfl * lfeps = 1 is kept)
         """
+        print(100 * "=")
+        print("beginning theta:", theta_old)
         lfeps = 1 / lfl
         
         self.attempts_count += 1
@@ -163,18 +166,18 @@ class XYSystem:
         
         # Fourier transform of the given configuration in real space ("_k" denoting Fourier space)
         theta_k = np.fft.fft(theta_old, norm='ortho')
-        
+        print("beginning theta_k", theta_k)
         # Construct the kernel in Fourier space
         k1, k2 = np.meshgrid(np.fft.fftfreq(L) * 2 * np.pi, np.fft.fftfreq(L) * 2 * np.pi)
         K_tilde_inv_2d = 1 / (4 * (np.sin(k1/2)**2 + np.sin(k2/2)**2) + m_FA**2)
         K_tilde_inv = K_tilde_inv_2d.flatten() # Flatten the kernel by line to maintain the correspondence
-        
+        print('Kti', K_tilde_inv)
         # Sample momenta from Gaussian distribution in Fourier space
         p_old_k = np.random.normal(0, np.sqrt(self.N / K_tilde_inv), np.shape(theta_k))
-        
+        print("beginning p_k", p_old_k)
         # First half-step for momenta
         deriv_k = compute_deriv_k(theta_k, self.nbr, self.data['T'])
-        
+        print("beginning deriv_k", deriv_k)
         d_p_k_half = -0.5 * lfeps * deriv_k
         p_k = p_old_k + d_p_k_half
 
@@ -238,9 +241,9 @@ class XYSystem:
             spin_config_calib = self.spin_config
             self.accepted_count = self.attempts_count = 0
             
-            if FA:
+            if sim_paras['FA']:
                 for _ in range(num_step_calib):
-                    spin_config_calib = self.leapfrog_FA(spin_config_calib, lfl=lfl_cur)
+                    spin_config_calib = self.leapfrog_FA(spin_config_calib, lfl=lfl_cur, m_FA=sim_paras['m_FA'])
             else:
                 for _ in range(num_step_calib):
                     spin_config_calib = self.leapfrog(spin_config_calib, lfl=lfl_cur)
@@ -271,8 +274,8 @@ class XYSystem:
         Measure and save raw data of energy and magnetization.
         '''
         energy = compute_energy(spin_config, self.nbr) / self.N
-        mx = np.sum(np.cos(spin_config)) / self.N
-        my = np.sum(np.sin(spin_config)) / self.N
+        mx = np.mean(np.cos(spin_config))
+        my = np.mean(np.sin(spin_config))
         m = np.sqrt(mx**2 + my**2) 
 
         self.data['energy'].append(energy)
@@ -295,8 +298,10 @@ class XYSystem:
             vor_thld (float, optional): Threshold for vortex identification. Defaults to 0.01.
             folder_temp (str, optional): Temporary folder for output. Defaults to None.
         """
+        # --------------------------------------------------------------------------------------------------------------------
         # Initialization
-        spin_config = self.spin_config # Generate a random spin configuration in the real space
+        
+        spin_config = self.spin_config
         
         self.data['T'] = T
         raw_data_path = os.path.join(folder_temp, f"raw_data_T{T:.2f}.txt")
@@ -321,7 +326,9 @@ class XYSystem:
             self.logger.info('=' * 100)
             return spin_config
         
+        # --------------------------------------------------------------------------------------------------------------------
         # Burn-in stage
+        
         self.accepted_count = self.attempts_count = 0  # Reset counters
         self.logger.info('-' * 100)
         
@@ -337,11 +344,13 @@ class XYSystem:
                 if (n + 1) % log_freq == 0:
                     pbar.update(log_freq)
                     self.logger.realtime(f'Equilibrating: trajectories {n + 1} / {equi_steps}')           
-                    
+
         self.logger.info(f"\nBurn-in Stage Completed (T = {T:.2f})")
         self.logger.info('-' * 100)
         
+        # --------------------------------------------------------------------------------------------------------------------
         # Sampling stage
+        
         self.accepted_count = self.attempts_count = 0  # Reset counters
         write_count = 0
         
@@ -417,75 +426,73 @@ def compute_energy(spin_config, nbr):
     Compute the total energy of the system using Numba.
     """
     #print(spin_config)
-    N = len(spin_config)
-    # Initialize energy array with zeros, using float32 for better performance
-    energy = np.zeros(N, dtype=np.float32)
+    L = spin_config.shape[0]
+
+    energy = 0.0
     
-    # Parallel loop over all lattice sites
-    for i in prange(N):
-        # Loop over 4 nearest neighbors and calculate energy contribution of one site
-        for j in range(4):
-            neighbor = nbr[i, j]
-            spin_diff = spin_config[i] - spin_config[neighbor]
-            energy[i] -= np.cos(spin_diff)
-    
-    # Sum up all energy contributions and divide by 2 to avoid double counting
-    return np.sum(energy) / 2
+    for i in prange(L):
+        for j in prange(L):
+            for k in range(4):
+                neighbor = nbr[i, j, k]
+                ni, nj = neighbor // L, neighbor % L
+                energy += - np.cos(spin_config[i, j] - spin_config[ni, nj])
+    return energy / 2
 
 @njit(parallel=True, fastmath=True)
 def compute_action(spin_config, nbr, T):
     """
     Compute the action of the system using Numba.
     """
-    N = len(spin_config)
-    inv_T = np.float32(1.0 / T)
-    action = np.zeros(N, dtype=np.float32)
-    
-    for i in prange(N):
-        for j in range(4):
-            neighbor = nbr[i, j]
-            spin_diff = spin_config[i] - spin_config[neighbor]
-            action[i] -= np.cos(spin_diff) * inv_T
-    return np.sum(action) / 2
+    L = spin_config.shape[0]
+    action = 0.0
+    inv_T = 1.0 / T
+    for i in prange(L):
+        for j in prange(L):
+            for k in range(4):
+                neighbor = nbr[i, j, k]
+                ni, nj = neighbor // L, neighbor % L
+                action -= np.cos(spin_config[i, j] - spin_config[ni, nj]) * inv_T
+    return action / 2
 
 @njit(parallel=True, fastmath=True)
 def compute_deriv(spin_config, nbr, T):
     """
     Compute the derivative of the action using Numba.
     """
-    N = len(spin_config)
-    inv_T = np.float32(1.0 / T)
-    deriv = np.zeros(N, dtype=np.float32)
-    
-    for i in prange(N):
-        local_deriv = np.float32(0.0)
-        for j in range(4):
-            neighbor = nbr[i, j]
-            spin_diff = spin_config[i] - spin_config[neighbor]
-            local_deriv += np.sin(spin_diff)
-        deriv[i] = local_deriv * inv_T
-    return deriv    
+    L = spin_config.shape[0]
+    deriv = np.zeros_like(spin_config)
+    inv_T = 1.0 / T
+    for i in prange(L):
+        for j in prange(L):
+            for k in range(4):
+                neighbor = nbr[i, j, k]
+                ni, nj = neighbor // L, neighbor % L
+                spin_diff = spin_config[i, j] - spin_config[ni, nj]
+                deriv[i, j] += np.sin(spin_diff) * inv_T
+    return deriv
 
 #@njit(parallel=True, fastmath=True)
 def compute_deriv_k(spin_config_k, nbr, T):
     """
     Compute the derivative of the action in Fourier space using Numba.
     """
-    spin_config = np.fft.ifft(spin_config_k, norm='ortho').real
+    L = int(np.sqrt(spin_config_k.size))
+    spin_config = np.fft.ifft2(spin_config_k, norm='ortho').real
     
-    N = len(spin_config)
     inv_T = np.float32(1.0 / T)
-    deriv = np.zeros(N, dtype=np.float32)
+    deriv = np.zeros((L, L), dtype=np.float32)
     
-    for i in prange(N):
-        local_deriv = np.float32(0.0)
-        for j in range(4):
-            neighbor = nbr[i, j]
-            spin_diff = spin_config[i] - spin_config[neighbor]
-            local_deriv += np.sin(spin_diff)
-        deriv[i] = local_deriv * inv_T
+    for i in prange(L):
+        for j in range(L):
+            local_deriv = np.float32(0.0)
+            for k in range(4):
+                neighbor = nbr[i, j, k]
+                ni, nj = neighbor // L, neighbor % L
+                spin_diff = spin_config[i, j] - spin_config[ni, nj]
+                local_deriv += np.sin(spin_diff)
+            deriv[i, j] = local_deriv * inv_T
     
-    deriv_k = np.fft.fft(deriv, norm='ortho')
+    deriv_k = np.fft.fft2(deriv, norm='ortho')
     return deriv_k
 
 def compute_Hamiltonian(spin_config, momentum, nbr, T):
@@ -500,6 +507,10 @@ def compute_Hamiltonian_FA(spin_config, momentum_k, K_tilde_inv, nbr, T):
     """
     Compute the Hamiltonian of the system in Fourier accelerated HMC.
     """
+    # Compute the kinetic energy in Fourier space
     ke = 0.5 * np.sum(momentum_k * K_tilde_inv * np.conj(momentum_k)).real
+    
+    # Compute the action in real space
     pe = compute_action(spin_config, nbr, T)
+    
     return ke + pe

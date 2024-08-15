@@ -48,7 +48,12 @@ def update_paras():
 
     # Create the output folder
     dir_path = os.path.dirname(os.path.abspath(__file__))
-    folder_temp = os.path.join(dir_path, "output", f"L{args.L}_T{args.T:.2f}_nt{args.num_traj}")
+    
+    if args.FA:
+        folder_temp = os.path.join(dir_path, "output", f"L{args.L}_T{args.T:.2f}_nt{args.num_traj}_FA")
+    else:
+        folder_temp = os.path.join(dir_path, "output", f"L{args.L}_T{args.T:.2f}_nt{args.num_traj}_noFA")
+        
     os.makedirs(folder_temp, exist_ok=True)
     
     # Update the simulation parameters with command-line arguments
@@ -121,7 +126,7 @@ def main():
     logger = setup_logging(log_file)
     
     logger.info(100 * "=")
-    logger.info("2D XY model (v1.3.0)")
+    logger.info("HMC Simulation of 2D XY model (v2.1.0)")
     logger.info(100 * "=")
     logger.info("Simulation Started")
     logger.info(100 * "=")

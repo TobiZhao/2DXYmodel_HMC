@@ -26,8 +26,8 @@ sim_paras = {
 # Leapfrog Calibration Parameters
 calibration_paras = {
     'num_step_calib': int(500),  # Number of trajectories in each calibration iteration
-    'acc_rate_upper': 0.75,      # Upper bound of acceptable HMC acceptance rate
-    'acc_rate_lower': 0.55,      # Lower bound of acceptable HMC acceptance rate
+    'acc_rate_upper': 0.95,      # Upper bound of acceptable HMC acceptance rate
+    'acc_rate_lower': 0.35,      # Lower bound of acceptable HMC acceptance rate
     'acc_rate_ref': 0.65,        # Reference HMC acceptance rate
     'lfl_adj': int(1),           # Step size for adjusting number of leapfrog steps during calibration
     'num_calib': int(20),        # Maximum number of calibration iterations
