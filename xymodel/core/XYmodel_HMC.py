@@ -153,64 +153,61 @@ class XYSystem:
         Parameters:
         lfl: number of Leapfrog steps
         lfeps: Leapfrog stepsize
-        m: mass parameter for Fourier acceleration kernel
+        m_FA: mass parameter for Fourier acceleration kernel
         
         (lfl * lfeps = 1 is kept)
         """
-        print(100 * "=")
-        print("beginning theta:", theta_old)
+
         lfeps = 1 / lfl
         
         self.attempts_count += 1
         L = self.L
         
-        # Fourier transform of the given configuration in real space ("_k" denoting Fourier space)
-        theta_k = np.fft.fft(theta_old, norm='ortho')
-        print("beginning theta_k", theta_k)
-        # Construct the kernel in Fourier space
-        k1, k2 = np.meshgrid(np.fft.fftfreq(L) * 2 * np.pi, np.fft.fftfreq(L) * 2 * np.pi)
-        K_tilde_inv_2d = 1 / (4 * (np.sin(k1/2)**2 + np.sin(k2/2)**2) + m_FA**2)
-        K_tilde_inv = K_tilde_inv_2d.flatten() # Flatten the kernel by line to maintain the correspondence
-        print('Kti', K_tilde_inv)
-        # Sample momenta from Gaussian distribution in Fourier space
-        p_old_k = np.random.normal(0, np.sqrt(self.N / K_tilde_inv), np.shape(theta_k))
-        print("beginning p_k", p_old_k)
+        # Construct the inverse Fourier transformed kernel
+        K_ft_inv = inv_ft_kernel(L, m_FA)
+        #print("K_ft_inv", K_ft_inv)
+        # Sample the real-valued object from Gaussian distribution
+        sigma = np.sqrt(L**2 / K_ft_inv)
+        Pi_k = sigma * np.random.normal(0, 1, K_ft_inv.shape)
+        
+        # Construct the auxiliary momentum in Fourier space from the real-valued object
+        p_k_old = gen_momentum(Pi_k)
+        p_k = p_k_old
+        #print("p_k_old", p_k_old)
         # First half-step for momenta
-        deriv_k = compute_deriv_k(theta_k, self.nbr, self.data['T'])
-        print("beginning deriv_k", deriv_k)
-        d_p_k_half = -0.5 * lfeps * deriv_k
-        p_k = p_old_k + d_p_k_half
+        deriv = compute_deriv(theta_old, self.nbr, self.data['T'])
+        d_p_half = -0.5 * lfeps * deriv
+        p = np.real(np.fft.ifft(p_k, norm='ortho')) + d_p_half
 
         # Full step for positions
-        theta_k += lfeps * K_tilde_inv * p_k
+        d_theta = lfeps * np.real(np.fft.ifft(np.multiply(K_ft_inv, np.fft.fft(p, norm='ortho')), norm='ortho'))
+        theta = theta_old + d_theta
 
         # (lfl-1) full steps for momenta and positions
         for _ in range(lfl - 1):
-            deriv_k = compute_deriv_k(theta_k, self.nbr, self.data['T'])
+            deriv = compute_deriv(theta, self.nbr, self.data['T'])
             
-            d_p_k = -lfeps * deriv_k
-            p_k += d_p_k
+            d_p = -lfeps * deriv
+            p += d_p
             
-            d_theta_k = lfeps * K_tilde_inv * p_k
-            theta_k += d_theta_k
-            
-        theta_new_k = theta_k
+            d_theta = lfeps * np.real(np.fft.ifft(np.multiply(K_ft_inv, np.fft.fft(p, norm='ortho')), norm='ortho'))
+            theta += d_theta
+        
+        theta_new = theta
         
         # Last half-step for momenta
-        deriv_k = compute_deriv_k(theta_new_k, self.nbr, self.data['T'])
+        deriv = compute_deriv(theta_new, self.nbr, self.data['T'])
+        d_p_half = -0.5 * lfeps * deriv
+        p_new = p + d_p_half
         
-        d_p_k_half = -0.5 * lfeps * deriv_k
-        p_new_k = p_k + d_p_k_half
-        
-        # Inverse Fourier transform to obtain values in real space
-        theta_new = np.fft.ifft(theta_new_k, norm='ortho').real
-
-        # Compute the difference in Hamiltonian
-        H_old = compute_Hamiltonian_FA(theta_old, p_old_k, K_tilde_inv, self.nbr, self.data['T'])
-        H_new = compute_Hamiltonian_FA(theta_new, p_new_k, K_tilde_inv, self.nbr, self.data['T'])
+        # Compute the difference of Hamiltonian
+        p_new_k = np.fft.fft(p_new, norm='ortho')
+        H_old = compute_Hamiltonian_FA(theta_old, p_k_old, K_ft_inv, self.nbr, self.data['T'])
+        H_new = compute_Hamiltonian_FA(theta_new, p_new_k, K_ft_inv, self.nbr, self.data['T'])
         delta_H = H_new - H_old
         self.delta_H = delta_H
-
+        #print("H_old", H_old)
+        print("delta_H", delta_H)
         # Metropolis acceptance step
         if self.Metropolis_choice(delta_H):
             self.accepted_count += 1
@@ -266,7 +263,7 @@ class XYSystem:
                 return False
         
         # Calibration failed if all iterations completed without success
-        self.logger.info('\nCalibration Failed: acceptance rate still out of range')
+        self.logger.info('\nCalibration Failed: acceptance rate still went out of range')
         return True
         
     def measure(self, spin_config):
@@ -471,30 +468,6 @@ def compute_deriv(spin_config, nbr, T):
                 deriv[i, j] += np.sin(spin_diff) * inv_T
     return deriv
 
-#@njit(parallel=True, fastmath=True)
-def compute_deriv_k(spin_config_k, nbr, T):
-    """
-    Compute the derivative of the action in Fourier space using Numba.
-    """
-    L = int(np.sqrt(spin_config_k.size))
-    spin_config = np.fft.ifft2(spin_config_k, norm='ortho').real
-    
-    inv_T = np.float32(1.0 / T)
-    deriv = np.zeros((L, L), dtype=np.float32)
-    
-    for i in prange(L):
-        for j in range(L):
-            local_deriv = np.float32(0.0)
-            for k in range(4):
-                neighbor = nbr[i, j, k]
-                ni, nj = neighbor // L, neighbor % L
-                spin_diff = spin_config[i, j] - spin_config[ni, nj]
-                local_deriv += np.sin(spin_diff)
-            deriv[i, j] = local_deriv * inv_T
-    
-    deriv_k = np.fft.fft2(deriv, norm='ortho')
-    return deriv_k
-
 def compute_Hamiltonian(spin_config, momentum, nbr, T):
     """
     Compute the Hamiltonian of the system.
@@ -508,9 +481,63 @@ def compute_Hamiltonian_FA(spin_config, momentum_k, K_tilde_inv, nbr, T):
     Compute the Hamiltonian of the system in Fourier accelerated HMC.
     """
     # Compute the kinetic energy in Fourier space
-    ke = 0.5 * np.sum(momentum_k * K_tilde_inv * np.conj(momentum_k)).real
+    ke = 0.5 * np.real(np.sum(np.conj(momentum_k) * K_tilde_inv * momentum_k))
     
     # Compute the action in real space
     pe = compute_action(spin_config, nbr, T)
     
+    print("ke, pe", ke, pe)
     return ke + pe
+
+def inv_ft_kernel(L=10, m_FA=1.0):
+    # Generate 1D frequency arrays (L/2 corresponding to Nyquist frequency for even L)
+    kx = np.fft.fftfreq(L) * np.pi
+    ky = np.fft.fftfreq(L) * np.pi
+
+    # Create 2D meshgrid
+    kx_2d, ky_2d = np.meshgrid(kx, ky, indexing='ij')
+    
+    # Construct the kernel
+    K_ft = 4 * (np.sin(kx_2d)**2 + np.sin(ky_2d)**2) + m_FA**2
+    K_ft_inv = 1 / K_ft
+    
+    return K_ft_inv
+
+def gen_momentum(Pi_k):
+    # Initialization
+    L = Pi_k.shape[0]
+    p_k = np.zeros((L, L), dtype=np.complex128)
+    
+    # Assign components
+    # 1) four vertices
+    p_k[0, 0] = Pi_k[0, 0]
+    p_k[L//2, 0] = Pi_k[L//2, 0]
+    p_k[0, L//2] = Pi_k[0, L//2]
+    p_k[L//2, L//2] = Pi_k[L//2, L//2]
+    
+    # 2) four bars on the inner edge
+    p_k[0, 1:L//2] = (Pi_k[0, 1:L//2] + 1j * Pi_k[0, -1:-L//2:-1]) / np.sqrt(2)
+    p_k[L//2, 1:L//2] = (Pi_k[L//2, 1:L//2] + 1j * Pi_k[L//2, -1:-L//2:-1]) / np.sqrt(2)
+    p_k[1:L//2, 0] = (Pi_k[1:L//2, 0] + 1j * Pi_k[-1:-L//2:-1, 0]) / np.sqrt(2)
+    p_k[1:L//2, L//2] = (Pi_k[1:L//2, L//2] + 1j * Pi_k[-1:-L//2:-1, L//2]) / np.sqrt(2)
+    
+    # 3) upper left square (real upper left square + imaginary upper right square)
+    p_k[1:L//2, 1:L//2] = (Pi_k[1:L//2, 1:L//2] + 1j * Pi_k[1:L//2, -1:-L//2:-1]) / np.sqrt(2)
+    
+    # 4) lower left square (real lower left square + imaginary lower right square)
+    p_k[(L//2+1):, L//2-1:0:-1] = (Pi_k[(L//2+1):, L//2-1:0:-1] + 1j * Pi_k[(L//2+1):, -1:-L//2:-1]) / np.sqrt(2)
+    
+    # Implement Hermitian symmetry
+    # 1) four bars on the outer edge (conjugated with four bars on the inner edge)
+    p_k[0, -1:-L//2:-1] = np.conjugate(p_k[0, 1:L//2])
+    p_k[L//2, -1:-L//2:-1] = np.conjugate(p_k[L//2, 1:L//2])
+    p_k[-1:-L//2:-1, 0] = np.conjugate(p_k[1:L//2, 0])
+    p_k[-1:-L//2:-1, L//2] = np.conjugate(p_k[1:L//2, L//2])
+    
+    # 2) lower right square (conjugated with upper left square)
+    p_k[-1:-L//2:-1, -1:-L//2:-1] = np.conjugate(p_k[1:L//2, 1:L//2])
+    
+    # 3) upper right square (conjugated with lower left square)
+    p_k[L//2-1:0:-1, L//2+1:] = p_k[L//2+1:, L//2-1:0:-1]
+
+    return p_k

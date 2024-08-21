@@ -14,7 +14,7 @@ sys_paras = {
 sim_paras = {
     'T': 0.892,             # Simulation temperature (in reduced units)
     'FA': False,            # Whether to perform Fourier acceleration
-    'm_FA': 0.1,               # Mass in the kernel in Fourier acceleration method
+    'm_FA': 1.0,               # Mass in the kernel in Fourier acceleration method
     'lfl': int(10),         # Number of leapfrog steps for each trajectory in HMC
     'num_traj': int(1e4),   # Total number of trajectories during sampling phase
     'lf_calib': True,       # Whether to perform automatic calibration of leapfrog parameters
