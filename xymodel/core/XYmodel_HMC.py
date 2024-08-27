@@ -88,36 +88,41 @@ class XYSystem:
         else:
             return np.random.rand() < np.exp(-delta_H)
             
-    def leapfrog(self, theta_old, lfl = int(10)):
+    def leapfrog(self, theta_ini, lfl = int(10)):
         '''
         Perform a leapfrog integration step, and return the updated configuration.
         
-        Parameters:
+        Inputs:
+            theta_ini: Initial configuration
+            lfl: Number of Leapfrog steps
+            lfeps: Leapfrog stepsize
+            
+            (lfl * lfeps = 1 is kept)
         
-        lfl: number of Leapfrog steps
-        lfeps: Leapfrog stepsize
-        
-        (lfl * lfeps = 1 is kept)
+        Outputs:
+            theta_fin: Updated configuration
         '''
+        # Initialization
+        T = self.data['T']
+        L = self.data['L']
         lfeps = 1 / lfl
-
         self.attempts_count += 1
         
-        # Sample momenta from Gaussian distribution
-        p_old = np.random.normal(0, 1, np.shape(theta_old))
+        # Sample momentum from Gaussian distribution
+        p_ini = np.random.normal(0, 1, np.shape(theta_ini))
         
-        # First half-step for momenta
-        deriv = compute_deriv(theta_old, self.nbr, self.data['T'])
+        # First half-step for momentum
+        deriv = compute_deriv(theta_ini, self.nbr, T)
         
         d_p_half = -0.5 * lfeps * deriv
-        p = p_old + d_p_half
+        p = p_ini.copy() + d_p_half
         
         # Full step for positions
-        theta = theta_old + lfeps * p
+        theta = theta_ini + lfeps * p
         
-        # (lfl-1) full steps for momenta and positions
+        # (lfl-1) full steps for momentum and positions
         for _ in range(lfl - 1):
-            deriv = compute_deriv(theta, self.nbr, self.data['T'])
+            deriv = compute_deriv(theta, self.nbr, T)
             
             d_p = -lfeps * deriv
             p += d_p
@@ -125,97 +130,121 @@ class XYSystem:
             d_theta = lfeps * p
             theta += d_theta
             
-        theta_new = theta
+        theta_fin = theta.copy()
         
-        # Last half-step for momenta
-        deriv = compute_deriv(theta_new, self.nbr, self.data['T'])
+        # Last half-step for momentum
+        deriv = compute_deriv(theta_fin, self.nbr, T)
         
         d_p_half = -0.5 * lfeps * deriv
-        p_new = p + d_p_half
+        p_fin = p.copy() + d_p_half
 
         # Compute the difference in Hamiltonian
-        H_old = compute_Hamiltonian(theta_old, p_old, self.nbr, self.data['T'])
-        H_new = compute_Hamiltonian(theta_new, p_new, self.nbr, self.data['T'])
-        delta_H = H_new - H_old
+        H_ini = compute_Hamiltonian(theta_ini, p_ini, self.nbr, T, L)
+        H_fin = compute_Hamiltonian(theta_fin, p_fin, self.nbr, T, L)
+        delta_H = H_fin - H_ini
         self.delta_H = delta_H
-        
+        #print("delta_H (per site)", delta_H / L ** 2)
         # Metropolis acceptance step
         if self.Metropolis_choice(delta_H):
             self.accepted_count += 1
-            return theta_new
+            return theta_fin
         else:
-            return theta_old
+            return theta_ini
         
-    def leapfrog_FA(self, theta_old, lfl=int(10), m_FA=0.1):
+    def leapfrog_FA(self, theta_ini, lfl=int(10), m_FA=0.1):
         """
-        Perform a leapfrog integration step with Fourier acceleration and return the updated configuration.
+        Perform a leapfrog integration step with Fourier Acceleration (FA) and return the updated configuration.
         
-        Parameters:
-        lfl: number of Leapfrog steps
-        lfeps: Leapfrog stepsize
-        m_FA: mass parameter for Fourier acceleration kernel
+        Inputs:
+            theta_ini: Initial configuration
+            lfl: Number of Leapfrog steps
+            lfeps: Leapfrog stepsize
+            m_FA: Mass parameter of FA
+            
+            (lfl * lfeps = 1 is kept)
         
-        (lfl * lfeps = 1 is kept)
+        Outputs:
+            theta_fin: Updated configuration
         """
-
-        lfeps = 1 / lfl
-        
-        self.attempts_count += 1
+        #Initializaiton
         L = self.L
-        
+        T = self.data['T']
+        lfeps = 1 / lfl
+        self.attempts_count += 1
+        #print(100 * "-")
         # Construct the inverse Fourier transformed kernel
         K_ft_inv = inv_ft_kernel(L, m_FA)
         #print("K_ft_inv", K_ft_inv)
         # Sample the real-valued object from Gaussian distribution
         sigma = np.sqrt(L**2 / K_ft_inv)
+        #print("sigma", sigma)
         Pi_k = sigma * np.random.normal(0, 1, K_ft_inv.shape)
-        
+        #print("Pi_k", Pi_k)
         # Construct the auxiliary momentum in Fourier space from the real-valued object
-        p_k_old = gen_momentum(Pi_k)
-        p_k = p_k_old
-        #print("p_k_old", p_k_old)
-        # First half-step for momenta
-        deriv = compute_deriv(theta_old, self.nbr, self.data['T'])
+        p_k_ini = gen_momentum(Pi_k)
+        p_ini_raw = np.fft.ifft2(p_k_ini) # should be real by Hermitian symmetry
+        p_ini = np.real(p_ini_raw)
+        #print("p_k_ini", p_k_ini)
+        #print("p_ini_raw (should be real cuz of Hermitian sym)", p_ini_raw)
+        #print("p_ini", p_ini)
+        #print("theta_ini", theta_ini)
+        
+        # First half-step for momentum
+        deriv = compute_deriv(theta_ini, self.nbr, T)
+        
         d_p_half = -0.5 * lfeps * deriv
-        p = np.real(np.fft.ifft(p_k, norm='ortho')) + d_p_half
-
+        p = p_ini.copy() + d_p_half
+        #print("p (after first half-step update)", p)
         # Full step for positions
-        d_theta = lfeps * np.real(np.fft.ifft(np.multiply(K_ft_inv, np.fft.fft(p, norm='ortho')), norm='ortho'))
-        theta = theta_old + d_theta
+        p_k = np.fft.fft2(p)
+        #print("p_k (in full step for positions)", p_k)
+        d_theta = lfeps * np.real(np.fft.ifft2(np.multiply(K_ft_inv, p_k)))
+        theta = theta_ini + d_theta
 
-        # (lfl-1) full steps for momenta and positions
+        # (lfl-1) full steps for momentum and positions
+        #d_p_cumu = 0
         for _ in range(lfl - 1):
-            deriv = compute_deriv(theta, self.nbr, self.data['T'])
-            
+            deriv = compute_deriv(theta, self.nbr, T)
+            #print(f"deriv (iteration {_ + 1})", deriv)
             d_p = -lfeps * deriv
             p += d_p
-            
-            d_theta = lfeps * np.real(np.fft.ifft(np.multiply(K_ft_inv, np.fft.fft(p, norm='ortho')), norm='ortho'))
+            #d_p_cumu += d_p
+            #print(f"d_p (iteration {_ + 1})", d_p)
+            #print(f"p (iteration {_ + 1})", p)
+            d_theta = lfeps * np.real(np.fft.ifft2(np.multiply(K_ft_inv, np.fft.fft2(p))))
             theta += d_theta
-        
-        theta_new = theta
-        
-        # Last half-step for momenta
-        deriv = compute_deriv(theta_new, self.nbr, self.data['T'])
+            #print(f"theta (iteration {_ + 1})", theta)
+
+        #print("d_p_cumu", d_p_cumu)
+        theta_fin = theta.copy()
+        #print("theta_fin", theta_fin)
+        # Last half-step for momentum
+        deriv = compute_deriv(theta_fin, self.nbr, T)
         d_p_half = -0.5 * lfeps * deriv
-        p_new = p + d_p_half
-        
+        p_fin = p.copy() + d_p_half
+        #print("p_fin", p_fin)
+        #print("d_p_tot", p_fin - p_ini)
         # Compute the difference of Hamiltonian
-        p_new_k = np.fft.fft(p_new, norm='ortho')
-        H_old = compute_Hamiltonian_FA(theta_old, p_k_old, K_ft_inv, self.nbr, self.data['T'])
-        H_new = compute_Hamiltonian_FA(theta_new, p_new_k, K_ft_inv, self.nbr, self.data['T'])
-        delta_H = H_new - H_old
+        p_k_fin = np.fft.fft2(p_fin)
+        #print("p_k_fin", p_k_fin)
+        #print("d_p_k_tot", p_k_fin - p_k_ini)
+        H_ini, ke_matrix_ini = compute_Hamiltonian_FA(theta_ini, p_k_ini, K_ft_inv, self.nbr, T, L)
+        H_fin, ke_matrix_fin = compute_Hamiltonian_FA(theta_fin, p_k_fin, K_ft_inv, self.nbr, T, L)
+        delta_H = H_fin - H_ini
+        #delta_ke_matrix = ke_matrix_fin - ke_matrix_ini
         self.delta_H = delta_H
-        #print("H_old", H_old)
-        print("delta_H", delta_H)
+        #print("delta_H (per site)", delta_H / L ** 2)
+        #print("delta_ke_matrix", delta_ke_matrix)
         # Metropolis acceptance step
         if self.Metropolis_choice(delta_H):
             self.accepted_count += 1
-            return theta_new
+            #print("accepted")
+            return theta_fin
         else:
-            return theta_old
+            #print("rejected")
+            return theta_ini
 
-    def leapfrog_calibration(self, num_step_calib=500, acc_rate_upper=0.8, acc_rate_lower=0.6, acc_rate_ref=0.7, lfl_adj=1, num_calib=10, lfl_lower=1, lfl_upper=50, FA=False, m_FA=0.1):
+    def leapfrog_calibration(self, num_step_calib=500, acc_rate_upper=0.8, acc_rate_lower=0.6, acc_rate_ref=0.7, lfl_adj=1, num_calib=10, lfl_lower=1, lfl_upper=50):
         """
         Calibrate leapfrog parameters to control the acceptance rate.
 
@@ -280,7 +309,9 @@ class XYSystem:
         self.data['my'].append(my)
         self.data['magnetization'].append(m)    
         
-    def run_simulation(self, T=None, num_traj=int(1e4), lfl=10, lf_calib=True, write_times=10, log_freq=int(100), max_sep_t=5, vor_thld=0.01, folder_temp=None, FA=False, m_FA=0.1):
+    def run_simulation(self, T=None, num_traj=int(1e4), lfl=10, lf_calib=True, max_sep_t=5, folder_temp=None, 
+                       FA=False, m_FA=0.1, comp_vor=False, comp_heli_mod=False, vor_thld=0.01, 
+                       write_times=10, log_freq=int(100)):
         """
         Run the simulation.
 
@@ -329,7 +360,7 @@ class XYSystem:
         self.accepted_count = self.attempts_count = 0  # Reset counters
         self.logger.info('-' * 100)
         
-        equi_steps = int(0.1 * num_traj)  # Number of trajectories for burn-in
+        equi_steps = int(0.1 * num_traj)  # Number of trajectories for burn-in（10%)
         
         with tqdm(total=equi_steps, desc="Equilibrating", ncols=100) as pbar:
             for n in range(equi_steps):
@@ -349,10 +380,10 @@ class XYSystem:
         # Sampling stage
         
         self.accepted_count = self.attempts_count = 0  # Reset counters
-        write_count = 0
         
         with tqdm(total=num_traj, desc="Sampling", ncols=100, leave=False) as pbar:
             for t in range(num_traj): 
+                # Whether to implement FA
                 if FA:
                     spin_config = self.leapfrog_FA(spin_config, sim_paras['lfl'], m_FA)
                 else:
@@ -361,16 +392,19 @@ class XYSystem:
                 if (t + 1) % log_freq == 0:
                     pbar.update(log_freq)
                     self.logger.realtime(f'Sampling: {t + 1} / {num_traj}')
+                    
+                # Save number of trajectories and difference of Hamiltonian
+                self.data['num_traj'].append(t+1)
+                self.data['delta_H'].append(self.delta_H)
+
+                # Measure and save raw data (energy and magnetization)
+                self.measure(spin_config)
                 
-                self.data['num_traj'].append(t+1)  # Save current number of trajectories
-                self.data['delta_H'].append(self.delta_H)  # Save current values of delta_H
-
-                self.measure(spin_config)  # Measure and save raw data (energy and magnetization)
-
-                self.acc_rate = self.accepted_count / self.attempts_count  # Compute and save acceptance rate
+                # Compute and save acceptance rate
+                self.acc_rate = self.accepted_count / self.attempts_count  
                 self.data['acc_rate'].append(self.acc_rate)
                 
-                # Compute and save current average gamma values and variances
+                # Compute and save current average gamma values and variances for correlations
                 gm = proc_corre(spin_config, max_sep_t)
                 gm = np.array(gm)
                 d_gm = gm - self.data['avg_gm']
@@ -386,37 +420,48 @@ class XYSystem:
                 self.data['var_gm_buffer'].append(self.data['var_gm'])
                 
                 # Compute and save vortex data
-                vor_num, avor_num, vor_den = compute_vor(spin_config, vor_thld)
-                self.data['vor_num'].append(int(vor_num))
-                self.data['avor_num'].append(int(avor_num))
-                self.data['vor_den'].append(vor_den)
+                if comp_vor:
+                    vor_num, avor_num, vor_den = compute_vor(spin_config, vor_thld)
+                    self.data['vor_num'].append(int(vor_num))
+                    self.data['avor_num'].append(int(avor_num))
+                    self.data['vor_den'].append(vor_den)
+                else:
+                    self.data['vor_num'].append(np.nan)
+                    self.data['avor_num'].append(np.nan)
+                    self.data['vor_den'].append(np.nan)
                 
                 # Compute and save the helicity modulus
-                heli_mod = compute_heli_mod(spin_config, T)
-                self.data['heli_mod'].append(heli_mod)
+                if comp_heli_mod:
+                    heli_mod = compute_heli_mod(spin_config, T)
+                    self.data['heli_mod'].append(heli_mod)
+                else:
+                    self.data['heli_mod'].append(np.nan)
 
                 # Raw data write-out
                 if (t + 1) % (int(num_traj / write_times)) == 0:
-                    with open(raw_data_path, 'a') as f:
-                        if os.stat(raw_data_path).st_size == 0:  # Create header if file is newly created
-                            f.write("# num_traj energy magnetization mx my acc_rate delta_H vor_num avor_num vor_den heli_mod avg_gm var_gm\n")
-                        
-                        for i in range(len(self.data['num_traj'])):  # Write data
-                            avg_gm_str = np.array2string(self.data['avg_gm_buffer'][i], precision=16, separator=',', suppress_small=True, max_line_width=np.inf)
-                            var_gm_str = np.array2string(self.data['var_gm_buffer'][i], precision=16, separator=',', suppress_small=True, max_line_width=np.inf)
-                            
-                            line = f"{self.data['num_traj'][i]} {self.data['energy'][i]:.16f} {self.data['magnetization'][i]:.16f} {self.data['mx'][i]:.16f} {self.data['my'][i]:.16f} {self.data['acc_rate'][i+int(write_count * num_traj / write_times)]:.16f} {self.data['delta_H'][i]:.16f} {self.data['vor_num'][i]} {self.data['avor_num'][i]} {self.data['vor_den'][i]:.16f} {self.data['heli_mod'][i]:.16f} {avg_gm_str} {var_gm_str}\n"
-                            f.write(line)
-                    
-                    # Reset data buffers after write-out
-                    for key in ['num_traj', 'energy', 'magnetization', 'mx', 'my', 'acc_rate', 'delta_H', 'vor_num', 'avor_num', 'vor_den', 'heli_mod', 'avg_gm_buffer', 'var_gm_buffer']:
-                        self.data[key].clear()
-                    
+                    data_write_out(self.data, raw_data_path)
+            
             self.logger.info(f"\n\nSampling Stage Completed (T = {T:.2f})")
             self.logger.info('=' * 100)
-        
         return spin_config
-    
+
+def data_write_out(data, raw_data_path):
+    with open(raw_data_path, 'a') as f:
+        if os.stat(raw_data_path).st_size == 0:  # Create header if file is newly created
+            f.write("# num_traj energy magnetization mx my acc_rate delta_H vor_num avor_num vor_den heli_mod avg_gm var_gm\n")
+        #print("lens", len(data['num_traj']), len(data['energy']), len(data['acc_rate']))
+        for i in range(len(data['num_traj'])):  # Write data
+            avg_gm_str = np.array2string(data['avg_gm_buffer'][i], precision=16, separator=',', suppress_small=True, max_line_width=np.inf)
+            var_gm_str = np.array2string(data['var_gm_buffer'][i], precision=16, separator=',', suppress_small=True, max_line_width=np.inf)
+            
+            line = f"{data['num_traj'][i]} {data['energy'][i]:.16f} {data['magnetization'][i]:.16f} {data['mx'][i]:.16f} {data['my'][i]:.16f} {data['acc_rate'][i]:.16f} {data['delta_H'][i]:.16f} {data['vor_num'][i]} {data['avor_num'][i]} {data['vor_den'][i]:.16f} {data['heli_mod'][i]:.16f} {avg_gm_str} {var_gm_str}\n"
+            
+            f.write(line)
+        
+    # Reset data buffers after write-out
+    for key in ['num_traj', 'energy', 'magnetization', 'mx', 'my', 'acc_rate', 'delta_H', 'vor_num', 'avor_num', 'vor_den', 'heli_mod', 'avg_gm_buffer', 'var_gm_buffer']:
+        data[key].clear()
+
 @njit(parallel=True, fastmath=True)  # Enable parallelization and fast math operations
 def compute_energy(spin_config, nbr):
     """
@@ -472,22 +517,27 @@ def compute_Hamiltonian(spin_config, momentum, nbr, T):
     """
     Compute the Hamiltonian of the system.
     """
-    ke = 0.5 * np.sum(momentum**2)
+    ke_matrix = 0.5 * momentum**2
+    
+    ke = np.sum(ke_matrix)
     pe = compute_action(spin_config, nbr, T)
+    
     return ke + pe
 
-def compute_Hamiltonian_FA(spin_config, momentum_k, K_tilde_inv, nbr, T):
+def compute_Hamiltonian_FA(spin_config, momentum_k, K_tilde_inv, nbr, T, L):
     """
     Compute the Hamiltonian of the system in Fourier accelerated HMC.
     """
     # Compute the kinetic energy in Fourier space
-    ke = 0.5 * np.real(np.sum(np.conj(momentum_k) * K_tilde_inv * momentum_k))
+    ke_matrix = 0.5 * np.conj(momentum_k) * K_tilde_inv * momentum_k / L ** 2
+    #print("ke_matrix", ke_matrix)
+    ke = np.sum(np.real(ke_matrix))
     
     # Compute the action in real space
     pe = compute_action(spin_config, nbr, T)
     
-    print("ke, pe", ke, pe)
-    return ke + pe
+    #print("ke, pe (per site)", ke / L ** 2, pe / L ** 2)
+    return ke + pe, ke_matrix
 
 def inv_ft_kernel(L=10, m_FA=1.0):
     # Generate 1D frequency arrays (L/2 corresponding to Nyquist frequency for even L)
@@ -496,11 +546,11 @@ def inv_ft_kernel(L=10, m_FA=1.0):
 
     # Create 2D meshgrid
     kx_2d, ky_2d = np.meshgrid(kx, ky, indexing='ij')
-    
+    #print(kx, ky)
     # Construct the kernel
     K_ft = 4 * (np.sin(kx_2d)**2 + np.sin(ky_2d)**2) + m_FA**2
     K_ft_inv = 1 / K_ft
-    
+    #print("denominator with m_FA = 0", K_ft - m_FA**2, threshold=np.inf)
     return K_ft_inv
 
 def gen_momentum(Pi_k):
@@ -525,7 +575,7 @@ def gen_momentum(Pi_k):
     p_k[1:L//2, 1:L//2] = (Pi_k[1:L//2, 1:L//2] + 1j * Pi_k[1:L//2, -1:-L//2:-1]) / np.sqrt(2)
     
     # 4) lower left square (real lower left square + imaginary lower right square)
-    p_k[(L//2+1):, L//2-1:0:-1] = (Pi_k[(L//2+1):, L//2-1:0:-1] + 1j * Pi_k[(L//2+1):, -1:-L//2:-1]) / np.sqrt(2)
+    p_k[(L//2+1):, 1:L//2] = (Pi_k[(L//2+1):, 1:L//2] + 1j * Pi_k[(L//2+1):, -1:-L//2:-1]) / np.sqrt(2)
     
     # Implement Hermitian symmetry
     # 1) four bars on the outer edge (conjugated with four bars on the inner edge)
@@ -538,6 +588,6 @@ def gen_momentum(Pi_k):
     p_k[-1:-L//2:-1, -1:-L//2:-1] = np.conjugate(p_k[1:L//2, 1:L//2])
     
     # 3) upper right square (conjugated with lower left square)
-    p_k[L//2-1:0:-1, L//2+1:] = p_k[L//2+1:, L//2-1:0:-1]
+    p_k[L//2-1:0:-1, L//2+1:] = np.conjugate(p_k[L//2+1:, L//2-1:0:-1])
 
     return p_k

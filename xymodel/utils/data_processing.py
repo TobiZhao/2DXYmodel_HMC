@@ -18,10 +18,10 @@ def load_ref_data(ref_data_file):
     Load reference data from a file and organize it into a dictionary.
 
     Parameters:
-    ref_data_file (str): Path to the reference data file.
+        ref_data_file (str): Path to the reference data file.
 
     Returns:
-    dict: A dictionary containing various physical quantities as reference.
+        dict: A dictionary containing various physical quantities as reference.
     """
     # Initialize dictionary to store different physical quantities
     ref_data = {
@@ -62,12 +62,15 @@ def load_ref_data(ref_data_file):
 def process_data_temp_point(para_data, data_folder):
     """
     Process data for a specific temperature point from a batch of jobs with raw data.
+    
+    This function processes data from multiple subfolders, and computes various physical quantities and statistics in each.
 
     Parameters:
-    para_data (dict): Parameters for data processing.
-    data_folder (str): Path to the folder containing job data.
-
-    This function processes data from multiple subfolders, and computes various physical quantities and statistics in each.
+        para_data (dict): Parameters for data processing.
+        data_folder (str): Path to the folder containing job data.
+    
+    Returns:
+        A json file containing values of processed data.
     """
     # Iterate through subfolders in the data_folder
     for subfolder in os.listdir(data_folder):
@@ -301,10 +304,10 @@ def process_data_temp_point(para_data, data_folder):
 # Temperature Range Processing
 #===============================================================================
 
-def process_data_temp_range(para_data, ref_data, data_folder):
+def process_data_temp_range(para_data, data_folder, ref_data=None):
     """
     Process data from a batch of jobs generated under a range of temperatures.
-
+    
     This function aggregates and processes data across a temperature range, computes various physical quantities, and generates plots for analysis.
     """
     print("=" * 100)
@@ -414,7 +417,7 @@ def process_data_temp_range(para_data, ref_data, data_folder):
 
     # Generate plots based on processed parameters
     if para_data['proc_energy']:
-        plot_energy(data_range, ref_data, path=data_folder_range)
+        plot_energy(data_range, data_folder_range, ref_data)
         
     if para_data['proc_sh']:
         plot_spec_heat(data_range, ref_data, path=data_folder_range)

@@ -22,6 +22,7 @@ def parse_arg_data_proc():
     parser.add_argument("--max_sep_n", type=int, default=100, help="Maximum Monte Carlo time separation n for autocorrelation function")
     parser.add_argument("--num_bin", type=int, default=20, help="Number of bins in binning method")
     parser.add_argument("--p0_tau", type=float, default=500.0, help="Initial estimation of parameter tau for autocorrelation function fit")
+    parser.add_argument("--use_ref_data", type=bool, action='store_true', help="Use reference data as comparation")
     
     # Set data processing options
     processing_options = [
@@ -49,7 +50,7 @@ def gen_para_dict(args):
             param_dict[new_key] = param_dict.pop(key)
     return param_dict
 
-def process_data():
+def process_data(use_ref_data=False):
     """
     Execute data processing.
     """
@@ -57,15 +58,18 @@ def process_data():
     para_data = gen_para_dict(args)
    
     # Set the data folder path
-    data_folder = r"Z:\Desktop\Research\Fourier_Accelerated_Lattice_Field_Theory\codes\XYmodel_HMC\output\output_server\L256\L256_T0.90_1.07_0.01_nt100k_cor\output"
+    data_folder = r"Z:\Desktop\Research\FALFT\codes\XYmodel_HMC\output\output_test"
     
     # Process data for each single temperature point
     process_data_temp_point(para_data, data_folder)
     
     # Process data for the range of temperatures
-    ref_data_file = f"Z:\Desktop\Research\Fourier_Accelerated_Lattice_Field_Theory\codes\XYmodel_HMC\data_Gupta_1992\L{para_data['L_ref']}.dat"
-    ref_data = load_ref_data(ref_data_file)
-    process_data_temp_range(para_data, ref_data, data_folder)
+    if use_ref_data:
+        ref_data_file = f"Z:\Desktop\Research\Fourier_Accelerated_Lattice_Field_Theory\codes\XYmodel_HMC\data_Gupta_1992\L{para_data['L_ref']}.dat"
+        ref_data = load_ref_data(ref_data_file)
+        process_data_temp_range(para_data, ref_data, data_folder)
+    else:
+        process_data_temp_range(para_data, data_folder)
 
 if __name__ == "__main__":
     process_data()

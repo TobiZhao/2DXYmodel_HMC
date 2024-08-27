@@ -1,4 +1,4 @@
-'''XYmodel/__init__.py'''
+'''xymodel/__init__.py'''
 
 # Core simulation module
 from .core.XYmodel_HMC import XYSystem
@@ -55,4 +55,4 @@ from .utils.data_processing import (
 from .parameters import (sys_paras, sim_paras, calibration_paras)
 
 # Package version
-__version__ = "2.1.0"
+__version__ = "2.2.0"

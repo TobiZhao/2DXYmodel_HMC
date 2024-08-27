@@ -283,7 +283,7 @@ def plot_autocorrelations(data_temp, path = None):
 # Temperature-Dependent Observable Visualization
 #===============================================================================
 
-def plot_energy(data_range, ref_data, path=None):
+def plot_energy(data_range, path=None, ref_data=None):
     """
     Plot average energy vs temperature, comparing HMC results with reference data.
     """
@@ -296,8 +296,9 @@ def plot_energy(data_range, ref_data, path=None):
                 capthick=errorbar_capthick, label='HMC')
 
     # Plot reference data
-    ax.scatter(ref_data['temp'], ref_data['energy'], marker='s', s=scatter_point_size, color='r',
-               facecolors='None', linewidths=scatter_linewidth, label='Gupta 1992')
+    if ref_data is not None:
+        ax.scatter(ref_data['temp'], ref_data['energy'], marker='s', s=scatter_point_size, color='r',
+                facecolors='None', linewidths=scatter_linewidth, label='Gupta 1992')
 
     # Set labels and title
     ax.set_xlabel('Temperature')

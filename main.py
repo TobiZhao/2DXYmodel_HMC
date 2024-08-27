@@ -23,10 +23,12 @@ def parse_args_main():
     parser.add_argument("--write_times", type=int, default=sys_paras['write_times'], help="Number of times to write out data")
 
     # Simulation parameters
+    parser.add_argument("--num_traj", type=int, default=sim_paras['num_traj'], help="Number of trajectories during sampling")
     parser.add_argument("--lfl", type=int, default=sim_paras['lfl'], help="Number of Leapfrog steps for each trajectory")
     parser.add_argument("--FA", action='store_true', default=sim_paras['FA'], help="Activate Fourier acceleration")
     parser.add_argument("--m_FA", type=float, default=sim_paras['m_FA'], help="Number of trajectories during sampling")
-    parser.add_argument("--num_traj", type=int, default=sim_paras['num_traj'], help="Number of trajectories during sampling")
+    parser.add_argument("--comp_vor", action='store_true', default=sim_paras['comp_vor'], help="Activate computing vortex quantities")
+    parser.add_argument("--comp_heli_mod", action='store_true', default=sim_paras['comp_heli_mod'], help="Activate computing helicity modulus")
     parser.add_argument("--no_lf_calib", action='store_false', help="Deactivate calibration of Leapfrog parameters")
     parser.add_argument("--log_freq", type=int, default=sim_paras['log_freq'], help="Frequency of displaying progress during equilibration and sampling stages")
     parser.add_argument("--max_sep_t", type=int, default=sim_paras['max_sep_t'], help="Maximum space separation when calculating correlation length")
@@ -50,9 +52,9 @@ def update_paras():
     dir_path = os.path.dirname(os.path.abspath(__file__))
     
     if args.FA:
-        folder_temp = os.path.join(dir_path, "output", f"L{args.L}_T{args.T:.2f}_nt{args.num_traj}_FA")
+        folder_temp = os.path.join(dir_path, "output", f"2DXY_L{args.L}_T{args.T:.2f}_nt{args.num_traj}_mFA{args.m_FA}")
     else:
-        folder_temp = os.path.join(dir_path, "output", f"L{args.L}_T{args.T:.2f}_nt{args.num_traj}_noFA")
+        folder_temp = os.path.join(dir_path, "output", f"2DXY_L{args.L}_T{args.T:.2f}_nt{args.num_traj}_noFA")
         
     os.makedirs(folder_temp, exist_ok=True)
     
@@ -66,10 +68,12 @@ def update_paras():
     
     sim_paras.update({
         'T': args.T,
+        'num_traj': args.num_traj,
+        'lfl': args.lfl,
         'FA': args.FA,
         'm_FA': args.m_FA,
-        'lfl': args.lfl,
-        'num_traj': args.num_traj,
+        'comp_vor': args.comp_vor,
+        'comp_heli_mod': args.comp_heli_mod,
         'lf_calib': args.no_lf_calib,
         'log_freq': args.log_freq,
         'max_sep_t': args.max_sep_t,
