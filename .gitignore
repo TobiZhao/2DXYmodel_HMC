@@ -26,6 +26,10 @@ Thumbs.db
 # Pseudocodes
 pseudocodes/
 
+# Test files
+test.py
+test.txt
+
 # Others
 print_dir_struc.py
 temp.txt
