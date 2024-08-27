@@ -130,7 +130,7 @@ def main():
     logger = setup_logging(log_file)
     
     logger.info(100 * "=")
-    logger.info("HMC Simulation of 2D XY model (v2.2.0)")
+    logger.info("HMC Simulation of 2D XY model (v2.3.0)")
     logger.info(100 * "=")
     logger.info("Simulation Started")
     logger.info(100 * "=")
