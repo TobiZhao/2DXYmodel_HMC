@@ -139,8 +139,8 @@ class XYSystem:
         p_fin = p.copy() + d_p_half
 
         # Compute the difference in Hamiltonian
-        H_ini = compute_Hamiltonian(theta_ini, p_ini, self.nbr, T, L)
-        H_fin = compute_Hamiltonian(theta_fin, p_fin, self.nbr, T, L)
+        H_ini = compute_Hamiltonian(theta_ini, p_ini, self.nbr, T)
+        H_fin = compute_Hamiltonian(theta_fin, p_fin, self.nbr, T)
         delta_H = H_fin - H_ini
         self.delta_H = delta_H
         #print("delta_H (per site)", delta_H / L ** 2)

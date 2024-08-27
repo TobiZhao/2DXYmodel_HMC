@@ -6,7 +6,7 @@ import os
 import json
 import csv
 import numpy as np
-import matplotlib.pyplot as plt
+
 from xymodel import *
 
 #===============================================================================
@@ -76,12 +76,13 @@ def process_data_temp_point(para_data, data_folder):
     for subfolder in os.listdir(data_folder):
         folder_temp = os.path.join(data_folder, subfolder)
         
-        print('Processing folder:', folder_temp)
+        print('Processing folder:', subfolder)
         
         # Initialize dictionary to store processed data
         data_temp = {
             'T': np.nan,                     # Temperature
             'L': np.nan,                     # System size
+            'm_FA': np.nan,                  # Mass in the kernel in Fourier acceleration method
             'meas_freq': para_data['meas_freq'],
             'max_sep_t': para_data['max_sep_t'],
             'max_sep_n': para_data['max_sep_n'],
@@ -132,13 +133,14 @@ def process_data_temp_point(para_data, data_folder):
         # Load configuration settings
         with open(os.path.join(folder_temp, 'config.json'), 'r') as json_file:
             settings = json.load(json_file)
-            data_temp['T'] = settings.get('sim_paras', {}).get('T', 0.892)
-            data_temp['L'] = settings.get('sys_paras', {}).get('L', int(10))
+            data_temp['T'] = settings.get('sim_paras', {}).get('T')
+            data_temp['L'] = settings.get('sys_paras', {}).get('L')
+
             L = data_temp['L']
             N = L ** 2
 
         # Process raw data
-        with open(os.path.join(folder_temp, f'raw_data_T{data_temp["T"]:.2f}.txt'), 'r') as raw_data:
+        with open(os.path.join(folder_temp, f"raw_data_T{data_temp['T']:.2f}.txt"), 'r') as raw_data:
             # Skip header line and store last line separately
             lines = raw_data.readlines()
             data_lines = lines[1:-1]
@@ -210,7 +212,7 @@ def process_data_temp_point(para_data, data_folder):
             rho, se_rho = compute_autocorre_func(data_temp, para_data['max_sep_n'])
 
             b, tau, b_sd, tau_sd = fit_autocorre_func(rho, para_data['p0_tau'])
-            
+
             data_temp['rho'] = rho
             data_temp['se_rho'] = se_rho
             data_temp['autocorre_fit_b'] = b
@@ -296,7 +298,7 @@ def process_data_temp_point(para_data, data_folder):
             'se_tau_int': data_temp['se_tau_int']
         }
 
-        output_file = os.path.join(folder_temp, f'values_T{data_temp["T"]:.2f}.json')
+        output_file = os.path.join(folder_temp, f"values_T{data_temp['T']:.2f}.json")
         with open(output_file, 'w') as outfile:
             json.dump(output_data, outfile, indent=4)
 
@@ -317,6 +319,7 @@ def process_data_temp_range(para_data, data_folder, ref_data=None):
     data_range = {
         'temp': [],
         'L': np.nan,
+        'm_FA': [],
         'meas_freq': para_data['meas_freq'],
         'num_traj': [],
         'num_bin': para_data['num_bin'],
@@ -344,7 +347,7 @@ def process_data_temp_range(para_data, data_folder, ref_data=None):
         'sd_autocorre_fit_tau': [],
         'cutoff_win': [],
         'tau_int': [],
-        'sd_tau_int': []
+        'se_tau_int': []
     }
         
     # Process each subfolder (each temperature point)
@@ -357,21 +360,24 @@ def process_data_temp_range(para_data, data_folder, ref_data=None):
             data_range['L'] = int(settings.get('sys_paras', {}).get('L'))
             num_traj = settings.get('sim_paras', {}).get('num_traj')
             temp = settings.get('sim_paras', {}).get('T')
-            
+            m_FA = settings.get('sim_paras', {}).get('m_FA')
+
             data_range['temp'].append(temp)
             data_range['num_traj'].append(num_traj)
+            data_range['m_FA'].append(m_FA)
+
             L = data_range['L']
             N = L ** 2
-
+       
         # Load and process values for each temperature point
         with open(os.path.join(folder_temp, f'values_T{temp:.2f}.json'), 'r') as values_file:
             data_values = json.load(values_file)
-            
+
             # Append data to the data_range lists
             for key in data_values:
                 if key in data_range:
                     data_range[key].append(data_values[key])
-        
+
         # Compute specific heat if requested
         if para_data['proc_sh']:
             with open(os.path.join(folder_temp, f'raw_data_T{temp:.2f}.txt'), 'r') as raw_data:
@@ -388,13 +394,14 @@ def process_data_temp_range(para_data, data_folder, ref_data=None):
                     
                     if (count + 1) % para_data['meas_freq'] == 0:
                         energy_raw.append(float(values[1]))
-                
+
                 # Compute specific heat
                 sh = np.var(energy_raw, ddof = 1) * N / temp ** 2
                 data_range['sh'].append(sh)
                 
                 # Use binning method to compute errors
                 bin_size = int(len(energy_raw) / para_data['num_bin'])
+
                 sh_bins = []
                 
                 for i in range(0, len(energy_raw), bin_size):
@@ -420,33 +427,33 @@ def process_data_temp_range(para_data, data_folder, ref_data=None):
         plot_energy(data_range, data_folder_range, ref_data)
         
     if para_data['proc_sh']:
-        plot_spec_heat(data_range, ref_data, path=data_folder_range)
+        plot_spec_heat(data_range, data_folder_range, ref_data)
         
     if para_data['proc_sus']:
-        plot_susceptibility(data_range, ref_data, path=data_folder_range)
+        plot_susceptibility(data_range, data_folder_range, ref_data)
 
     if para_data['proc_vor_den']:
-        plot_vor_den(data_range, path=data_folder_range)
+        plot_vor_den(data_range, data_folder_range)
 
     if para_data['proc_heli_mod']:
-        plot_heli_mod(data_range, path=data_folder_range)
+        plot_heli_mod(data_range, data_folder_range)
         
     if para_data['proc_bdc']:
-        plot_bdc(data_range, path=data_folder_range)
+        plot_bdc(data_range, data_folder_range)
         
     if para_data['proc_corre']:
-        plot_corre_fit_c(data_range, path=data_folder_range)
-        plot_corre_fit_m(data_range, path=data_folder_range)
-        plot_corre_len(data_range, ref_data, path=data_folder_range)
+        plot_corre_fit_c(data_range, data_folder_range)
+        plot_corre_fit_m(data_range, data_folder_range)
+        plot_corre_len(data_range, data_folder_range, ref_data)
 
     if para_data['proc_autocorre']:
-        plot_autocorre_fit_b(data_range, path=data_folder_range)
-        plot_autocorre_fit_tau(data_range, ref_data, path=data_folder_range)
-        plot_cutoff_win(data_range, path=data_folder_range)
-        plot_tau_int(data_range, path=data_folder_range)
+        plot_autocorre_fit_b(data_range, data_folder_range)
+        plot_autocorre_fit_tau(data_range, data_folder_range, ref_data)
+        plot_cutoff_win(data_range, data_folder_range)
+        plot_tau_int(data_range, data_folder_range)
     
     if para_data['proc_corre'] and para_data['proc_autocorre']:
-        plot_critical_exponent(data_range, path=data_folder_range)
+        plot_critical_exponent(data_range, data_folder_range)
         
 #===============================================================================
 # Data Saving and Formatting
@@ -471,6 +478,7 @@ def save_as_table(data_range, data_folder):
         writer.writerow([
             "$T$",                      # Temperature
             "$n_{\\text{traj}}$",       # Number of trajectories
+            "$m_{\\text{FA}}$",         # Mass in FA (NAN without FA)
             "$E$",                      # Energy
             "$C_v$",                    # Specific heat
             "$\\chi$",                  # Susceptibility
@@ -493,6 +501,9 @@ def save_as_table(data_range, data_folder):
             
             # Format number of trajectories (in thousands)
             num_traj = f"{int(data_range['num_traj'][i] / 1000)}K"
+            
+            # Format mass in FA
+            m_FA = f"{data_range['m_FA'][i]:.4f}" if not np.isnan(data_range['m_FA'][i]) else '-'
             
             # Format other quantities with error values in parentheses
             # Use '-' for nan values
@@ -520,12 +531,13 @@ def save_as_table(data_range, data_folder):
             
             cutoff_win = int(data_range['cutoff_win'][i]) if not np.isnan(data_range['cutoff_win'][i]) else '-'
             
-            tau_int = f"{data_range['tau_int'][i]:.3f}({int(data_range['sd_tau_int'][i] * 1000)})" if not np.isnan(data_range['tau_int'][i]) and not np.isnan(data_range['sd_tau_int'][i]) else '-'
+            tau_int = f"{data_range['tau_int'][i]:.3f}({int(data_range['se_tau_int'][i] * 1000)})" if not np.isnan(data_range['tau_int'][i]) and not np.isnan(data_range['se_tau_int'][i]) else '-'
             
             # Write formatted row
             writer.writerow([
                 f"${temp}$", 
                 f"${num_traj}$", 
+                f"${m_FA}$",
                 f"${energy}$", 
                 f"${sh}$", 
                 f"${sus}$", 

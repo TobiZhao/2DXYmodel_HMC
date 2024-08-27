@@ -1,5 +1,8 @@
 '''xymodel/__init__.py'''
 
+# Version
+from .__version__ import __version__
+
 # Core simulation module
 from .core.XYmodel_HMC import XYSystem
 
@@ -24,7 +27,7 @@ from .analysis.autocorrelations import (
 )
 
 # Utility modules
-from .utils.logging import setup_logging, get_logger
+from .utils.custom_logging import setup_logging, get_logger
 from .utils.visualization import (
     # Basic plotting functions
     plot_spin_config, plot_raw_data_basic, plot_raw_data_vor_den,
@@ -54,5 +57,3 @@ from .utils.data_processing import (
 # Simulation parameters
 from .parameters import (sys_paras, sim_paras, calibration_paras)
 
-# Package version
-__version__ = "2.3.0"

@@ -313,7 +313,7 @@ def plot_energy(data_range, path=None, ref_data=None):
     else:
         plt.show()
 
-def plot_spec_heat(data_range, ref_data, path=None):
+def plot_spec_heat(data_range, path=None, ref_data=None):
     """
     Plot specific heat vs temperature, comparing HMC results with reference data.
     """
@@ -326,8 +326,9 @@ def plot_spec_heat(data_range, ref_data, path=None):
                 capthick=errorbar_capthick, label='HMC')
 
     # Plot reference data
-    ax.scatter(ref_data['temp'], ref_data['sh'], marker='s', s=scatter_point_size, color='r',
-               facecolors='None', linewidths=scatter_linewidth, label='Gupta 1992')
+    if ref_data is not None:
+        ax.scatter(ref_data['temp'], ref_data['sh'], marker='s', s=scatter_point_size, color='r',
+                facecolors='None', linewidths=scatter_linewidth, label='Gupta 1992')
 
     # Set labels and title
     ax.set_xlabel('Temperature')
@@ -342,7 +343,7 @@ def plot_spec_heat(data_range, ref_data, path=None):
     else:
         plt.show()
         
-def plot_susceptibility(data_range, ref_data, path=None):
+def plot_susceptibility(data_range, path=None, ref_data=None):
     """
     Plot susceptibility vs temperature, comparing HMC results with reference data.
     """
@@ -355,8 +356,9 @@ def plot_susceptibility(data_range, ref_data, path=None):
                 capthick=errorbar_capthick, label='HMC')
 
     # Plot reference data
-    ax.scatter(ref_data['temp'], ref_data['sus'], marker='s', s=scatter_point_size, color='r',
-               facecolors='None', linewidths=scatter_linewidth, label='Gupta 1992')
+    if ref_data is not None:
+        ax.scatter(ref_data['temp'], ref_data['sus'], marker='s', s=scatter_point_size, color='r',
+                facecolors='None', linewidths=scatter_linewidth, label='Gupta 1992')
 
     # Set labels and title
     ax.set_xlabel('Temperature')
@@ -496,7 +498,7 @@ def plot_corre_fit_m(data_range, path=None):
     else:
         plt.show()
 
-def plot_corre_len(data_range, ref_data, path=None):
+def plot_corre_len(data_range, path=None, ref_data=None):
     """
     Plot correlation length vs temperature, comparing HMC results with reference data.
     """
@@ -509,8 +511,9 @@ def plot_corre_len(data_range, ref_data, path=None):
                 capthick=errorbar_capthick, label='HMC')
 
     # Plot reference data
-    ax.scatter(ref_data['temp'], ref_data['corre_len'], marker='s', s=scatter_point_size, color='r',
-               facecolors='None', linewidths=scatter_linewidth, label='Gupta 1992')
+    if ref_data is not None:
+        ax.scatter(ref_data['temp'], ref_data['corre_len'], marker='s', s=scatter_point_size, color='r',
+                facecolors='None', linewidths=scatter_linewidth, label='Gupta 1992')
 
     # Set labels and title
     ax.set_xlabel('Temperature')
@@ -550,7 +553,7 @@ def plot_autocorre_fit_b(data_range, path=None):
     else:
         plt.show()
 
-def plot_autocorre_fit_tau(data_range, ref_data, path=None):
+def plot_autocorre_fit_tau(data_range, path=None, ref_data=None):
     """
     Plot autocorrelation function fit parameter tau vs temperature, comparing HMC results with reference data.
     """
@@ -563,8 +566,9 @@ def plot_autocorre_fit_tau(data_range, ref_data, path=None):
                 capthick=errorbar_capthick, label='HMC')
 
     # Plot reference data
-    ax.scatter(ref_data['temp'], ref_data['autocorre_fit_tau'], marker='s', s=scatter_point_size, color='r',
-               facecolors='None', linewidths=scatter_linewidth, label='Gupta 1992')
+    if ref_data is not None:
+        ax.scatter(ref_data['temp'], ref_data['autocorre_fit_tau'], marker='s', s=scatter_point_size, color='r',
+                facecolors='None', linewidths=scatter_linewidth, label='Gupta 1992')
 
     # Set labels and title
     ax.set_xlabel('Temperature')
@@ -610,7 +614,7 @@ def plot_tau_int(data_range, path=None):
     fig, ax = plt.subplots(figsize=(16, 16))
 
     # Plot HMC data with error bars
-    ax.errorbar(data_range['temp'], data_range['tau_int'], yerr=data_range['sd_tau_int'], fmt='o', ecolor='gray',
+    ax.errorbar(data_range['temp'], data_range['tau_int'], yerr=data_range['se_tau_int'], fmt='o', ecolor='gray',
                 ms=data_point_size, capsize=errorbar_capsize, elinewidth=errorbar_elinewidth,
                 capthick=errorbar_capthick, label='HMC')
 

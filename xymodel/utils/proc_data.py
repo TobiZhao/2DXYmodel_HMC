@@ -22,7 +22,7 @@ def parse_arg_data_proc():
     parser.add_argument("--max_sep_n", type=int, default=100, help="Maximum Monte Carlo time separation n for autocorrelation function")
     parser.add_argument("--num_bin", type=int, default=20, help="Number of bins in binning method")
     parser.add_argument("--p0_tau", type=float, default=500.0, help="Initial estimation of parameter tau for autocorrelation function fit")
-    parser.add_argument("--use_ref_data", type=bool, action='store_true', help="Use reference data as comparation")
+    parser.add_argument("--use_ref_data", action='store_true', help="Use reference data as comparation")
     
     # Set data processing options
     processing_options = [

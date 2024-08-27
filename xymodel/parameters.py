@@ -2,6 +2,8 @@
 # Parameters
 #===============================================================================
 
+import numpy as np
+
 # System Parameters
 sys_paras = {
     'seed': None,                # Seed for random number generator
@@ -16,7 +18,7 @@ sim_paras = {
     'FA': False,                 # Whether to implement Fourier acceleration
     'comp_vor': False,           # Whether to compute vortex quantities
     'comp_heli_mod': False,      # Whether to compute helicity modulus
-    'm_FA': 1.0,                 # Mass in the kernel in Fourier acceleration method
+    'm_FA': np.nan,              # Mass in the kernel in Fourier acceleration method
     'lfl': int(10),              # Number of leapfrog steps for each trajectory in HMC
     'num_traj': int(1e4),        # Total number of trajectories during sampling phase
     'lf_calib': True,            # Whether to implement automatic calibration of leapfrog parameters

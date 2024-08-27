@@ -9,6 +9,7 @@ import time
 import json
 
 from xymodel import *
+from xymodel.__version__ import __version__
 
 def parse_args_main():
     """
@@ -130,7 +131,7 @@ def main():
     logger = setup_logging(log_file)
     
     logger.info(100 * "=")
-    logger.info("HMC Simulation of 2D XY model (v2.3.0)")
+    logger.info(f"HMC Simulation of 2D XY model (v{__version__ })")
     logger.info(100 * "=")
     logger.info("Simulation Started")
     logger.info(100 * "=")
